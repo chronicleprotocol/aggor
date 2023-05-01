@@ -48,7 +48,7 @@ contract OracleAggregator is IOracle {
         chainlink = _chainlink;
     }
 
-    // The mean of the oracle prices. If there is any error in valueRead() from
+    // The mean of the oracle prices. If there is any error in _valueRead() from
     // the partnered oracles, we return this value
     uint256 public lastKnownMeanPrice;
 
@@ -66,6 +66,16 @@ contract OracleAggregator is IOracle {
         return (val, ok);
     }
 
+    event ChainlinkStalePrice(
+        clUpdatedAt uint256;
+        difference uint256;
+    );
+
+    event ReportedPriceIsZero(
+        chainlinkValue uint256;
+        chronicleValue uint256;
+    );
+
     function _valueRead() internal returns (uint256, bool, CLData memory) {
         // Query Chainlink oracle
         CLData memory cld;
@@ -78,7 +88,7 @@ contract OracleAggregator is IOracle {
 
         uint256 diff = block.timestamp - cld.updatedAt;
         if (!(diff <= chainlinkStalenessThresholdSec)) {
-            //emit ChainLinkStalePrice
+            emit ChainLinkStalePrice(cld.updatedAt, diff);
             return (lastKnownMeanPrice, false, cld);
         }
 
@@ -91,7 +101,7 @@ contract OracleAggregator is IOracle {
                 lastKnownMeanPrice = 0;
                 return (lastKnownMeanPrice, true, cld); // TODO both agree price is zero... ?
             }
-            // emit ReportedPriceIsZero
+            emit ReportedPriceIsZero(cld.answer, cvalue);
             return (lastKnownMeanPrice, false, cld);
         }
 
