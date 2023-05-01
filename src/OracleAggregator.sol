@@ -40,14 +40,8 @@ contract OracleAggregator is IOracle {
         uint256 decimals;
     }
 
-    event ChainlinkStalePrice(
-        clUpdatedAt uint256;
-        difference uint256;
-    );
-    event ReportedPriceIsZero(
-        chainlinkValue uint256;
-        chronicleValue uint256;
-    );
+    event ChainlinkStalePrice(uint256 clUpdatedAt, uint256 difference);
+    event ReportedPriceIsZero(uint256 chainlinkValue, uint256 chronicleValue);
 
     // --- Funcs ---
 
@@ -90,7 +84,7 @@ contract OracleAggregator is IOracle {
 
         uint256 diff = block.timestamp - cld.updatedAt;
         if (!(diff <= chainlinkStalenessThresholdSec)) {
-            emit ChainLinkStalePrice(cld.updatedAt, diff);
+            emit ChainlinkStalePrice(cld.updatedAt, diff);
             return (lastKnownMeanPrice, false, cld);
         }
 
@@ -103,7 +97,7 @@ contract OracleAggregator is IOracle {
                 lastKnownMeanPrice = 0;
                 return (lastKnownMeanPrice, true, cld); // Both agree price is zero
             }
-            emit ReportedPriceIsZero(cld.answer, cvalue);
+            emit ReportedPriceIsZero(uint256(cld.answer), cvalue);
             // If one of the values is zero, return last known "good" price
             return (lastKnownMeanPrice, false, cld);
         }
