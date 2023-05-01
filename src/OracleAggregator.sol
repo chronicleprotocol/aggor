@@ -6,7 +6,6 @@ import {IOracle} from "src/interfaces/IOracle.sol";
 import {IChronicle} from "src/interfaces/_external/IChronicle.sol";
 import {IChainlinkAggregator} from "src/interfaces/_external/IChainlinkAggregator.sol";
 
-error UnknownOracleKind();
 error CannotBeZero();
 error ZeroAddress();
 
@@ -24,6 +23,34 @@ contract OracleAggregator is IOracle {
         _;
     }
 
+    // --- Vars ---
+    address public chronicle;
+    address public chainlink;
+
+    // The mean of the oracle prices. If there is any error in _valueRead() from
+    // any partnered oracle, we return this value
+    uint256 public lastKnownMeanPrice;
+
+    struct CLData{
+        uint80 roundId;
+        int256 answer;
+        uint256 startedAt;
+        uint256 updatedAt;
+        uint80 answeredInRound;
+        uint256 decimals;
+    }
+
+    event ChainlinkStalePrice(
+        clUpdatedAt uint256;
+        difference uint256;
+    );
+    event ReportedPriceIsZero(
+        chainlinkValue uint256;
+        chronicleValue uint256;
+    );
+
+    // --- Funcs ---
+
     function read() external /*toll*/ returns (uint256 value) {
         (value,) = this.valueRead();
     }
@@ -38,8 +65,6 @@ contract OracleAggregator is IOracle {
         return int256(value);
     }
 
-    address public chronicle;
-    address public chainlink;
     constructor(address _chronicle, address _chainlink) {
         wards[msg.sender] = 1;
         if (_chronicle == address(0)) revert ZeroAddress();
@@ -48,33 +73,10 @@ contract OracleAggregator is IOracle {
         chainlink = _chainlink;
     }
 
-    // The mean of the oracle prices. If there is any error in _valueRead() from
-    // the partnered oracles, we return this value
-    uint256 public lastKnownMeanPrice;
-
-    struct CLData{
-        uint80 roundId;
-        int256 answer;
-        uint256 startedAt;
-        uint256 updatedAt;
-        uint80 answeredInRound;
-        uint256 decimals;
-    }
-
     function valueRead() external override(IOracle) returns (uint256, bool) {
         (uint256 val, bool ok,) = _valueRead();
         return (val, ok);
     }
-
-    event ChainlinkStalePrice(
-        clUpdatedAt uint256;
-        difference uint256;
-    );
-
-    event ReportedPriceIsZero(
-        chainlinkValue uint256;
-        chronicleValue uint256;
-    );
 
     function _valueRead() internal returns (uint256, bool, CLData memory) {
         // Query Chainlink oracle
@@ -99,9 +101,10 @@ contract OracleAggregator is IOracle {
         if (cld.answer <= 0 || cvalue <= 0) {
             if (cld.answer == 0 && cvalue == 0) {
                 lastKnownMeanPrice = 0;
-                return (lastKnownMeanPrice, true, cld); // TODO both agree price is zero... ?
+                return (lastKnownMeanPrice, true, cld); // Both agree price is zero
             }
             emit ReportedPriceIsZero(cld.answer, cvalue);
+            // If one of the values is zero, return last known "good" price
             return (lastKnownMeanPrice, false, cld);
         }
 
@@ -132,7 +135,6 @@ contract OracleAggregator is IOracle {
         (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound, uint256 decimals) {
         decimals = uint256(IChainlinkAggregator(orcl).decimals());
         (roundId, answer, startedAt, updatedAt, answeredInRound) = IChainlinkAggregator(orcl).latestRoundData();
-        //TODO can this revert, if so... try ^
     }
 
     function _readOracle_Chronicle(address orcl) internal view returns (uint256, bool) {
