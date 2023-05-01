@@ -6,10 +6,12 @@ import {IOracle} from "src/interfaces/IOracle.sol";
 import {IChronicle} from "src/interfaces/_external/IChronicle.sol";
 import {IChainlinkAggregator} from "src/interfaces/_external/IChainlinkAggregator.sol";
 
-error CannotBeZero();
-error ZeroAddress();
-
 contract OracleAggregator is IOracle {
+    error CannotBeZero();
+    error ZeroAddress();
+    error ChainlinkStalePrice(uint256 clUpdatedAt, uint256 difference);
+    error ReportedPriceIsZero(uint256 chainlinkValue, uint256 chronicleValue);
+
     // --- Auth ---
     mapping(address => uint256) public wards;
     function rely(address usr) external auth {
@@ -27,9 +29,13 @@ contract OracleAggregator is IOracle {
     address public chronicle;
     address public chainlink;
 
-    // The mean of the oracle prices. If there is any error in _valueRead() from
+    // The mean of the oracle prices. If there is any error in _valueSet() from
     // any partnered oracle, we return this value
-    uint256 public lastKnownMeanPrice;
+    uint256 public lastAgreedMeanPrice;
+    uint256 public updatedAt;
+
+    //
+    uint256 public stalenessThresholdSec;
 
     struct CLData{
         uint80 roundId;
@@ -39,26 +45,9 @@ contract OracleAggregator is IOracle {
         uint80 answeredInRound;
         uint256 decimals;
     }
-
-    event ChainlinkStalePrice(uint256 clUpdatedAt, uint256 difference);
-    event ReportedPriceIsZero(uint256 chainlinkValue, uint256 chronicleValue);
+    CLData public chainLinkData;
 
     // --- Funcs ---
-
-    function read() external /*toll*/ returns (uint256 value) {
-        (value,) = this.valueRead();
-    }
-
-    function latestRoundData() external returns (uint80, int256, uint256, uint256, uint80) {
-        (uint256 value,, CLData memory cld) = _valueRead();
-        return (cld.roundId, int256(value), cld.startedAt, cld.updatedAt, cld.answeredInRound);
-    }
-
-    function latestAnswer() external returns (int256) {
-        (uint256 value,) = this.valueRead();
-        return int256(value);
-    }
-
     constructor(address _chronicle, address _chainlink) {
         wards[msg.sender] = 1;
         if (_chronicle == address(0)) revert ZeroAddress();
@@ -67,68 +56,75 @@ contract OracleAggregator is IOracle {
         chainlink = _chainlink;
     }
 
-    function valueRead() external override(IOracle) returns (uint256, bool) {
-        (uint256 val, bool ok,) = _valueRead();
-        return (val, ok);
+    function read() external /*toll*/ view returns (uint256 value) {
+        (value,) = this.valueRead();
     }
 
-    function _valueRead() internal returns (uint256, bool, CLData memory) {
-        // Query Chainlink oracle
-        CLData memory cld;
-        (cld.roundId,
-         cld.answer,
-         cld.startedAt,
-         cld.updatedAt,
-         cld.answeredInRound,
-         cld.decimals) = _readOracle_Chainlink(chainlink);
+    function latestRoundData() external view returns (uint80, int256, uint256, uint256, uint80) {
+        return (chainLinkData.roundId, int256(lastAgreedMeanPrice),
+                chainLinkData.startedAt, chainLinkData.updatedAt, chainLinkData.answeredInRound);
+    }
 
-        uint256 diff = block.timestamp - cld.updatedAt;
-        if (!(diff <= chainlinkStalenessThresholdSec)) {
-            emit ChainlinkStalePrice(cld.updatedAt, diff);
-            return (lastKnownMeanPrice, false, cld);
+    function latestAnswer() external view returns (int256) {
+        return int256(lastAgreedMeanPrice);
+    }
+
+    function valueRead() external view override(IOracle) returns (uint256 value, bool isStale) {
+        value = lastAgreedMeanPrice;
+        isStale = (block.timestamp - updatedAt) <= stalenessThresholdSec;
+    }
+
+    function poke() external {
+        // Query Chainlink oracle
+        (chainLinkData.roundId,
+         chainLinkData.answer,
+         chainLinkData.startedAt,
+         chainLinkData.updatedAt,
+         chainLinkData.answeredInRound,
+         chainLinkData.decimals) = _readOracle_Chainlink(chainlink);
+
+        uint256 diff = block.timestamp - chainLinkData.updatedAt;
+        if (!(diff <= stalenessThresholdSec)) {
+            revert ChainlinkStalePrice(chainLinkData.updatedAt, diff);
         }
 
         // Query Chronicle oracle
         (uint256 cvalue, ) = _readOracle_Chronicle(chronicle);
 
         // Zero check
-        if (cld.answer <= 0 || cvalue <= 0) {
-            if (cld.answer == 0 && cvalue == 0) {
-                lastKnownMeanPrice = 0;
-                return (lastKnownMeanPrice, true, cld); // Both agree price is zero
+        if (chainLinkData.answer <= 0 || cvalue <= 0) {
+            if (chainLinkData.answer == 0 && cvalue == 0) {
+                lastAgreedMeanPrice = 0;
             }
-            emit ReportedPriceIsZero(uint256(cld.answer), cvalue);
-            // If one of the values is zero, return last known "good" price
-            return (lastKnownMeanPrice, false, cld);
+            revert ReportedPriceIsZero(uint256(chainLinkData.answer), cvalue);
         }
 
         // Properly decimalize Chainlink value
         uint256 value;
-        if (cld.decimals == 18) {
-            value = uint256(cld.answer);
-        } else if (cld.decimals < 18) {
-            value = uint256(cld.answer) * 10**(18-cld.decimals);
-        } else if (cld.decimals > 18) {
-            value = uint256(cld.answer) / 10**(cld.decimals - 18);
+        if (chainLinkData.decimals == 18) {
+            value = uint256(chainLinkData.answer);
+        } else if (chainLinkData.decimals < 18) {
+            value = uint256(chainLinkData.answer) * 10**(18-chainLinkData.decimals);
+        } else if (chainLinkData.decimals > 18) {
+            value = uint256(chainLinkData.answer) / 10**(chainLinkData.decimals - 18);
         }
 
         // Produce the mean
-        lastKnownMeanPrice = (value + cvalue) / 2;
-        return (lastKnownMeanPrice, true, cld);
+        lastAgreedMeanPrice = (value + cvalue) / 2;
+        updatedAt = block.timestamp;
     }
 
-    uint256 public chainlinkStalenessThresholdSec;
-    function setChainlinkStalenessThreshold(uint256 thresholdInSec) external auth {
+    function setStalenessThreshold(uint256 thresholdInSec) external auth {
         if (thresholdInSec == 0) revert CannotBeZero();
-        chainlinkStalenessThresholdSec = thresholdInSec;
+        stalenessThresholdSec = thresholdInSec;
     }
 
     // -- readOracle Implementations --
 
     function _readOracle_Chainlink(address orcl) internal view returns
-        (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound, uint256 decimals) {
+        (uint80 roundId, int256 answer, uint256 startedAt, uint256 _updatedAt, uint80 answeredInRound, uint256 decimals) {
         decimals = uint256(IChainlinkAggregator(orcl).decimals());
-        (roundId, answer, startedAt, updatedAt, answeredInRound) = IChainlinkAggregator(orcl).latestRoundData();
+        (roundId, answer, startedAt, _updatedAt, answeredInRound) = IChainlinkAggregator(orcl).latestRoundData();
     }
 
     function _readOracle_Chronicle(address orcl) internal view returns (uint256, bool) {

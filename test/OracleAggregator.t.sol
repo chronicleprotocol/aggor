@@ -16,17 +16,28 @@ contract OracleAggregatorTest is Test {
 
     function setUp() public {
         oracle = new OracleAggregator(address(chronicle), address(chainlink));
-        oracle.setChainlinkStalenessThreshold(1 hours);
+        oracle.setStalenessThreshold(1 hours);
     }
 
     function test_valueRead() public {
+        // IRL initial block timestamp will be much greter than whatever we set
+        // for the staleness threshold
+        vm.warp(oracle.stalenessThresholdSec()*2);
+
         chainlink.setAnswerAndUpdatedAt(10, block.timestamp);
         chronicle.setAnswer(20);
 
-        uint256 want = (10 + 20) / 2;
+        // Never been poked
         (uint256 got, bool ok) = oracle.valueRead();
-        assertTrue(ok);
+        assertEq(got, 0);
+        assertEq(ok, false);
+
+        oracle.poke();
+
+        uint256 want = (10 + 20) / 2;
+        (got, ok) = oracle.valueRead();
         assertEq(want, got);
+        assertEq(ok, true);
 
         // Chronicle/Maker interface
         got = oracle.read();
@@ -35,58 +46,79 @@ contract OracleAggregatorTest is Test {
         // Chainlink deprecated interface
         int256 igot = oracle.latestAnswer();
         assertEq(want, uint256(igot));
+
+        (, int256 answer,,,) = oracle.latestRoundData();
+        assertEq(want, uint256(answer));
     }
-    /*
-    function test_getData_Chronicle_RecoversRevert() public {
+
+    function test_lastGoodPrice() public {
+        vm.warp(oracle.stalenessThresholdSec()*2);
+        chronicle.setAnswer(20);
         chainlink.setAnswerAndUpdatedAt(10, block.timestamp);
+        oracle.poke();
+
+        uint256 want = (10 + 20) / 2;
+        (uint256 got, bool ok) = oracle.valueRead();
+        assertEq(want, got);
+        assertEq(ok, true);
+
+        vm.warp(oracle.stalenessThresholdSec()*3);
+        chainlink.setAnswerAndUpdatedAt(20, block.timestamp); // i.e. (20+20)/2
         chronicle.setShouldFail(true);
 
-        uint want = 10;
-        (uint got, bool ok) = oracle.getData();
-        assertFalse(ok);
+        vm.expectRevert(abi.encodeWithSelector(OracleAggregator.ReportedPriceIsZero.selector, 20, 0));
+        oracle.poke();
+
+        (got, ok) = oracle.valueRead();
         assertEq(want, got);
+        assertEq(ok, true);
+
+        chronicle.setShouldFail(false);
+        oracle.poke();
+
+        vm.warp(oracle.stalenessThresholdSec()*4);
+
+        // Update price
+        want = (20 + 20) / 2;
+        (got, ok) = oracle.valueRead();
+        assertEq(want, got);
+        assertEq(ok, true);
+
+        chainlink.setAnswerAndUpdatedAt(30, block.timestamp - (oracle.stalenessThresholdSec() + 1));
+        vm.expectRevert(abi.encodeWithSelector(OracleAggregator.ChainlinkStalePrice.selector, 10799, 3601));
+        oracle.poke();
+
+        // Price stays the same (last known good price)
+        (got, ok) = oracle.valueRead();
+        assertEq(want, got);
+        assertEq(ok, true);
     }
 
-    function test_getData_Chainlink_StalenessThresholdRespected() public {
-        chainlink.setAnswerAndUpdatedAt(10, block.timestamp);
-        chronicle.setAnswer(20);
-
-        // Chainlink's threshold set to 1 hour.
-        vm.warp(block.timestamp + 2 hours);
-
-        uint want = 20; // Only chronicle oracle's value used
-        (uint got, bool ok) = oracle.getData();
-        assertFalse(ok); // min_oracle threshold not reached
-        assertEq(want, got);
-    }
-
-    function test_getData_Chainlink_DecimalConversion() public {
-        oracle.drop(address(chainlink));
+    function test_Chainlink_DecimalConversion() public {
         chronicle.setAnswer(1e18);
 
         // Less than 18 decimals.
         chainlink = new Mock_ChainlinkAggregator(uint8(6));
-        oracle.lift(address(chainlink), OracleAggregator.Kind.Chainlink);
+        oracle = new OracleAggregator(address(chronicle), address(chainlink));
 
         chainlink.setAnswerAndUpdatedAt(1e6, block.timestamp); // 1
+        oracle.poke();
         uint want = 1e18;
-        (uint got, bool ok) = oracle.getData();
+        (uint got, bool ok) = oracle.valueRead();
         assertTrue(ok);
         assertEq(want, got);
-
-        oracle.drop(address(chainlink));
 
         // More than 18 decimals.
         chainlink = new Mock_ChainlinkAggregator(uint8(20));
-        oracle.lift(address(chainlink), OracleAggregator.Kind.Chainlink);
+        oracle = new OracleAggregator(address(chronicle), address(chainlink));
 
         chainlink.setAnswerAndUpdatedAt(1e20, block.timestamp); // 1
+        oracle.poke();
         want = 1e18;
-        (got, ok) = oracle.getData();
+        (got, ok) = oracle.valueRead();
         assertTrue(ok);
         assertEq(want, got);
     }
-    */
 }
 
 contract Mock_ChainlinkAggregator is IChainlinkAggregator {
@@ -131,7 +163,8 @@ contract Mock_Chronicle is IChronicle {
 
     function read() external view returns (uint256) {
         if (should_fail) {
-            revert("");
+            // https://github.com/chronicleprotocol/medianite/blob/master/deploy/arbitrum-ETHUSD/median/src/median.sol#L84
+            revert("Median/invalid-price-feed");
         }
 
         return _answer;
