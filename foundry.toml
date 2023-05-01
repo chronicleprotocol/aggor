@@ -1,0 +1,10 @@
+[profile.default]
+src = 'src'
+out = 'out'
+libs = ['lib']
+
+[fmt]
+ignore = ['src/OracleAggregator.sol']
+int_types = 'preserve'
+
+# See more config options https://github.com/foundry-rs/foundry/tree/master/config
