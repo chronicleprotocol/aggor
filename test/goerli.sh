@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 
-# 0xF753aC640B777696cABF0df7c20733271b02E51b
-
 if [ -z "$ETH_RPC_URL" ]; then
     echo "# Must set ETH_RPC_URL"
     exit
@@ -19,6 +17,6 @@ real_chainlink='0xD4a33860578De61DBAbDc8BFdb98FD742fA7028e'
 
 chronicle_answer=$(cast call $mock_chronicle 'read()(uint)')
 echo "# Chronicle oracle returns: $chronicle_answer"
-echo "# Note, can change with: cast send $mock_chronicle 'setAnswer(uint)' 1111..."
+echo "#  ^ can change with: cast send $mock_chronicle 'setAnswer(uint)' 1111..."
 
 forge test -vvv --match-test valueReadOnchain --fork-url $ETH_RPC_URL
