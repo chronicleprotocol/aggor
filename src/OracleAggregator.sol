@@ -59,8 +59,8 @@ contract OracleAggregator is IOracle {
         chainlink = _chainlink;
     }
 
-    function read() external /*toll*/ view returns (uint256 value) {
-        (value,) = this.valueRead();
+    function read() external /*toll*/ view returns (uint256) {
+        return lastAgreedMeanPrice;
     }
 
     function latestRoundData() external view returns (uint80, int256, uint256, uint256, uint80) {
