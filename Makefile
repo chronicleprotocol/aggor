@@ -6,6 +6,10 @@ test:
 test_goerli:
 	./test/goerli.sh
 
+.PHONY: gas_report
+gas_report:
+	forge t --gas-report --match-path test/OracleAggregator.t.sol
+
 .PHONY: deploy
 deploy:
 	@echo 'To deploy, you need to run something like:'

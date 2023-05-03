@@ -31,7 +31,7 @@ contract OracleAggregator is IOracle {
 
     /// @dev The mean of the oracle prices. If there is any error in _valueSet()
     ///      from any partnered oracle, we return this value.
-    uint256 public lastAgreedMeanPrice;
+    uint256 private lastAgreedMeanPrice;
     uint256 public updatedAt;
 
     /// @dev Used as a staleness threshold. It does not prevent us from returning 
