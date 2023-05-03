@@ -29,12 +29,15 @@ contract OracleAggregator is IOracle {
     address public chronicle;
     address public chainlink;
 
-    // The mean of the oracle prices. If there is any error in _valueSet() from
-    // any partnered oracle, we return this value
+    /// @dev The mean of the oracle prices. If there is any error in _valueSet()
+    ///      from any partnered oracle, we return this value.
     uint256 public lastAgreedMeanPrice;
     uint256 public updatedAt;
 
-    //
+    /// @dev Used as a staleness threshold. It does not prevent us from returning 
+    ///      a price, but it will flag the "staleness" flag on valueRead().
+    ///      Additionally, it is used to decide whether the value returned by
+    ///      Chainlink is fresh enough [see poke()].
     uint256 public stalenessThresholdSec;
 
     struct CLData{
@@ -74,6 +77,10 @@ contract OracleAggregator is IOracle {
         isStale = (block.timestamp - updatedAt) <= stalenessThresholdSec;
     }
 
+    /// @dev Poking is required. On a successful poke a mean price is set along with
+    ///      the update timestamp. On any reversion these values will NOT be set and
+    ///      any request returned to consumers will be the last known "good" mean
+    ///      price.
     function poke() external {
         // Query Chainlink oracle
         (chainLinkData.roundId,
