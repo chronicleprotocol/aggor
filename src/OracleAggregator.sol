@@ -100,8 +100,10 @@ contract OracleAggregator is IOracle {
 
         // Zero check
         if (chainLinkData.answer <= 0 || cvalue <= 0) {
-            if (chainLinkData.answer == 0 && cvalue == 0) {
+            if (chainLinkData.answer == 0 && cvalue == 0) { // Both agree that price is zero
                 lastAgreedMeanPrice = 0;
+                updatedAt = block.timestamp;
+                return;
             }
             revert ReportedPriceIsZero(uint256(chainLinkData.answer), cvalue);
         }
