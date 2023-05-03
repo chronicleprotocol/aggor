@@ -48,7 +48,7 @@ contract OracleAggregator is IOracle {
         uint80 answeredInRound;
         uint256 decimals;
     }
-    CLData public chainLinkData;
+    CLData private chainlinkData;
 
     // --- Funcs ---
     constructor(address _chronicle, address _chainlink) {
@@ -64,8 +64,8 @@ contract OracleAggregator is IOracle {
     }
 
     function latestRoundData() external view returns (uint80, int256, uint256, uint256, uint80) {
-        return (chainLinkData.roundId, int256(lastAgreedMeanPrice),
-                chainLinkData.startedAt, chainLinkData.updatedAt, chainLinkData.answeredInRound);
+        return (chainlinkData.roundId, int256(lastAgreedMeanPrice),
+                chainlinkData.startedAt, chainlinkData.updatedAt, chainlinkData.answeredInRound);
     }
 
     function latestAnswer() external view returns (int256) {
@@ -83,39 +83,39 @@ contract OracleAggregator is IOracle {
     ///      price.
     function poke() external {
         // Query Chainlink oracle
-        (chainLinkData.roundId,
-         chainLinkData.answer,
-         chainLinkData.startedAt,
-         chainLinkData.updatedAt,
-         chainLinkData.answeredInRound,
-         chainLinkData.decimals) = _readOracle_Chainlink(chainlink);
+        (chainlinkData.roundId,
+         chainlinkData.answer,
+         chainlinkData.startedAt,
+         chainlinkData.updatedAt,
+         chainlinkData.answeredInRound,
+         chainlinkData.decimals) = _readOracle_Chainlink(chainlink);
 
-        uint256 diff = block.timestamp - chainLinkData.updatedAt;
+        uint256 diff = block.timestamp - chainlinkData.updatedAt;
         if (!(diff <= stalenessThresholdSec)) {
-            revert ChainlinkStalePrice(chainLinkData.updatedAt, diff);
+            revert ChainlinkStalePrice(chainlinkData.updatedAt, diff);
         }
 
         // Query Chronicle oracle
         (uint256 cvalue, ) = _readOracle_Chronicle(chronicle);
 
         // Zero check
-        if (chainLinkData.answer <= 0 || cvalue <= 0) {
-            if (chainLinkData.answer == 0 && cvalue == 0) { // Both agree that price is zero
+        if (chainlinkData.answer <= 0 || cvalue <= 0) {
+            if (chainlinkData.answer == 0 && cvalue == 0) { // Both agree that price is zero
                 lastAgreedMeanPrice = 0;
                 updatedAt = block.timestamp;
                 return;
             }
-            revert ReportedPriceIsZero(uint256(chainLinkData.answer), cvalue);
+            revert ReportedPriceIsZero(uint256(chainlinkData.answer), cvalue);
         }
 
         // Properly decimalize Chainlink value
         uint256 value;
-        if (chainLinkData.decimals == 18) {
-            value = uint256(chainLinkData.answer);
-        } else if (chainLinkData.decimals < 18) {
-            value = uint256(chainLinkData.answer) * 10**(18-chainLinkData.decimals);
-        } else if (chainLinkData.decimals > 18) {
-            value = uint256(chainLinkData.answer) / 10**(chainLinkData.decimals - 18);
+        if (chainlinkData.decimals == 18) {
+            value = uint256(chainlinkData.answer);
+        } else if (chainlinkData.decimals < 18) {
+            value = uint256(chainlinkData.answer) * 10**(18-chainlinkData.decimals);
+        } else if (chainlinkData.decimals > 18) {
+            value = uint256(chainlinkData.answer) / 10**(chainlinkData.decimals - 18);
         }
 
         // Produce the mean
