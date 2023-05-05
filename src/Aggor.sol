@@ -6,15 +6,29 @@ import {Toll} from "chronicle-std/toll/Toll.sol";
 
 import {IAggor} from "./IAggor.sol";
 
-// @todo Move IChronicle to chronicle-std.
+// @todo Import from chronicle-std once PR#1 merged.
 import {IChronicle} from "./interfaces/_external/IChronicle.sol";
 import {IChainlinkAggregatorV3} from
     "./interfaces/_external/IChainlinkAggregatorV3.sol";
 
+/**
+ * @title Aggor
+ * @custom:version 0.1.0
+ *
+ * @notice Aggor combines oracle values from multiple providers into a single
+ *         value
+ */
 contract Aggor is IAggor, Auth, Toll {
-    address public chronicle;
-    address public chainlink;
+    /// @inheritdoc IChronicle
+    bytes32 public immutable wat;
 
+    /// @inheritdoc IAggor
+    address public immutable chronicle;
+
+    /// @inheritdoc IAggor
+    address public immutable chainlink;
+
+    /// @inheritdoc IAggor
     uint public stalenessThreshold = 1 days;
 
     uint128 private _val;
@@ -26,9 +40,20 @@ contract Aggor is IAggor, Auth, Toll {
 
         chronicle = chronicle_;
         chainlink = chainlink_;
+
+        // Note that IChronicle::wat() is a constant and save to cache.
+        wat = IChronicle(chronicle_).wat();
     }
 
+    /// @inheritdoc IAggor
     function poke() external {
+        _poke();
+    }
+
+    // @todo Here will soon be a `poke_optimized_<longNumber>` function.
+    //       With a function selector of 0x00000000 :)
+
+    function _poke() internal {
         bool ok;
 
         // Read chronicle.
@@ -62,33 +87,49 @@ contract Aggor is IAggor, Auth, Toll {
 
     // -- IChronicle
 
+    /// @inheritdoc IChronicle
     function read() external view toll returns (uint) {
         require(_val != 0);
         return _val;
     }
 
+    /// @inheritdoc IChronicle
     function tryRead() external view toll returns (bool, uint) {
         return (_val != 0, _val);
     }
 
+    /// @inheritdoc IChronicle
+    function readWithAge() external view toll returns (uint, uint) {
+        require(_val != 0);
+        return (_val, _age);
+    }
+
+    /// @inheritdoc IChronicle
+    function tryReadWithAge() external view toll returns (bool, uint, uint) {
+        return (_val != 0, _val, _age);
+    }
+
     // -- IChainlinkAggregatorV3
 
+    /// @inheritdoc IAggor
     function latestRoundData()
         external
         view
         toll
         returns (uint80, int, uint, uint, uint80)
     {
+        // @todo Reminder to evaluate whether zero should be returned or not.
         return (0, _toInt(_val), 0, _age, 0);
     }
 
-    /// @custom:deprecated See https://docs.chain.link/data-feeds/api-reference/#latestanswer.
+    /// @inheritdoc IAggor
     function latestAnswer() external view toll returns (int) {
         return _toInt(_val);
     }
 
     // -- Auth'ed Functionality --
 
+    /// @inheritdoc IAggor
     function setStalenessThreshold(uint stalenessThreshold_) external auth {
         require(stalenessThreshold_ != 0);
 

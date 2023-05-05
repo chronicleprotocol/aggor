@@ -59,8 +59,10 @@ abstract contract IAggorTest is Test {
     // -- Poke --
 
     function _checkReadFunctions(uint128 wantVal, uint wantAge) private {
+        // -- IChronicle
         bool ok;
         uint gotVal;
+        uint gotAge;
 
         // IChronicle::read
         gotVal = aggor.read();
@@ -71,12 +73,25 @@ abstract contract IAggorTest is Test {
         assertTrue(ok);
         assertEq(gotVal, wantVal);
 
-        // IChainlinkAggregatorV3::latestRoundData
+        // IChronicle::readWithAge
+        (gotVal, gotAge) = aggor.readWithAge();
+        assertEq(gotVal, wantVal);
+        assertEq(gotAge, wantAge);
+
+        // IChronicle::tryReadWithAge
+        (ok, gotVal, gotAge) = aggor.tryReadWithAge();
+        assertTrue(ok);
+        assertEq(gotVal, wantVal);
+        assertEq(gotAge, wantAge);
+
+        // -- IChainlink
         uint80 roundId;
         int answer;
         uint startedAt;
         uint updatedAt;
         uint80 answeredInRound;
+
+        // IChainlinkAggregatorV3::latestRoundData
         (roundId, answer, startedAt, updatedAt, answeredInRound) =
             aggor.latestRoundData();
         assertEq(roundId, 0);
@@ -245,6 +260,17 @@ abstract contract IAggorTest is Test {
     function test_tryRead_ReturnsFalseIfValIsZero() public {
         bool ok;
         (ok,) = aggor.tryRead();
+        assertFalse(ok);
+    }
+
+    function test_readWithAge_FailsIfValIsZero() public {
+        vm.expectRevert();
+        aggor.readWithAge();
+    }
+
+    function test_tryReadWithAge_ReturnsFalseIfValIsZero() public {
+        bool ok;
+        (ok,,) = aggor.tryReadWithAge();
         assertFalse(ok);
     }
 

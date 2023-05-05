@@ -12,7 +12,10 @@ import {MockIChainlinkAggregatorV3} from
 contract AggorTest is IAggorTest {
     function setUp() public {
         setUp(
-            new Aggor(address(new MockIChronicle()), address(new MockIChainlinkAggregatorV3()))
+            new Aggor(
+                address(new MockIChronicle()),
+                address(new MockIChainlinkAggregatorV3())
+            )
         );
     }
 }
