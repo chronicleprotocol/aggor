@@ -29,7 +29,7 @@ contract Aggor is IAggor, Auth, Toll {
     address public immutable chainlink;
 
     /// @inheritdoc IAggor
-    uint public stalenessThreshold = 1 days;
+    uint public stalenessThreshold;
 
     uint128 private _val;
     uint32 private _age;
@@ -41,19 +41,22 @@ contract Aggor is IAggor, Auth, Toll {
         chronicle = chronicle_;
         chainlink = chainlink_;
 
-        // Note that IChronicle::wat() is a constant and save to cache.
+        // Note that IChronicle::wat() is immutable and save to cache.
         wat = IChronicle(chronicle_).wat();
+
+        // Let stalenessThreshold be 1 hour.
+        setStalenessThreshold(1 hours);
+    }
+
+    /// @dev Optimized function selector: 0x00000000.
+    ///      Note that this function is _not_ defined via the IAggor interface
+    ///      and one should _not_ depend on it.
+    function poke_optimized_3923566589() external {
+        poke();
     }
 
     /// @inheritdoc IAggor
-    function poke() external {
-        _poke();
-    }
-
-    // @todo Here will soon be a `poke_optimized_<longNumber>` function.
-    //       With a function selector of 0x00000000 :)
-
-    function _poke() internal {
+    function poke() public {
         bool ok;
 
         // Read chronicle.
@@ -130,7 +133,7 @@ contract Aggor is IAggor, Auth, Toll {
     // -- Auth'ed Functionality --
 
     /// @inheritdoc IAggor
-    function setStalenessThreshold(uint stalenessThreshold_) external auth {
+    function setStalenessThreshold(uint stalenessThreshold_) public auth {
         require(stalenessThreshold_ != 0);
 
         if (stalenessThreshold != stalenessThreshold_) {
@@ -143,11 +146,11 @@ contract Aggor is IAggor, Auth, Toll {
 
     // -- Private Helpers --
 
-    function _tryReadChronicle() private view returns (bool, uint) {
+    function _tryReadChronicle() internal view returns (bool, uint) {
         return IChronicle(chronicle).tryRead();
     }
 
-    function _tryReadChainlink() private returns (bool, uint) {
+    function _tryReadChainlink() internal returns (bool, uint) {
         int answer;
         uint updatedAt;
         (, answer,, updatedAt,) =
@@ -166,7 +169,8 @@ contract Aggor is IAggor, Auth, Toll {
             return (false, 0);
         }
 
-        // Adjust decimals, if necessary.
+        // Convert answer to uint.
+        // Note to adjust decimals if necessary.
         uint val;
         uint decimals = IChainlinkAggregatorV3(chainlink).decimals();
         if (decimals == 18) {
@@ -187,12 +191,12 @@ contract Aggor is IAggor, Auth, Toll {
         return (true, val);
     }
 
-    function _toInt(uint128 val) private pure returns (int) {
+    function _toInt(uint128 val) internal pure returns (int) {
         // Note that int(type(uint128).max) == type(uint128).max.
         return int(uint(val));
     }
 
-    function _unsafeMean(uint a, uint b) private pure returns (uint) {
+    function _unsafeMean(uint a, uint b) internal pure returns (uint) {
         uint mean;
         unchecked {
             // Note that >> 1 equals a division by 2.
