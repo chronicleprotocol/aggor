@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.16;
 
-import {IChronicle} from "./interfaces/_external/IChronicle.sol";
+import {IChronicle} from "chronicle-std/IChronicle.sol";
 
 interface IAggor is IChronicle {
     /// @notice Thrown if an oracle read fails.

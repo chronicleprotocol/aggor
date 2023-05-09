@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.16;
 
+import {IChronicle} from "chronicle-std/IChronicle.sol";
 import {Auth} from "chronicle-std/auth/Auth.sol";
 import {Toll} from "chronicle-std/toll/Toll.sol";
 
 import {IAggor} from "./IAggor.sol";
 
-// @todo Import from chronicle-std once PR#1 merged.
-import {IChronicle} from "./interfaces/_external/IChronicle.sol";
 import {IChainlinkAggregatorV3} from
     "./interfaces/_external/IChainlinkAggregatorV3.sol";
 
