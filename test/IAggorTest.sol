@@ -37,6 +37,22 @@ abstract contract IAggorTest is Test {
         IToll(address(aggor)).kiss(address(this));
     }
 
+    // Copied from Aggor.sol
+    uint constant pscale = 10_000;
+
+    function _pctdiff(uint a, uint b) private pure returns (uint) {
+        if (a == b) return 0;
+        return a > b
+            ? pscale - (((b * 1e18) / a) * pscale / 1e18)
+            : pscale - (((a * 1e18) / b) * pscale / 1e18);
+    }
+
+    function _distance(uint a, uint b) private pure returns (uint) {
+        unchecked {
+            return (a > b) ? a - b : b - a;
+        }
+    }
+
     function test_Deployment() public {
         // Deployer is auth'ed.
         assertTrue(IAuth(address(aggor)).authed(address(this)));
@@ -107,7 +123,7 @@ abstract contract IAggorTest is Test {
         assertEq(uint128(uint(answer)), wantVal);
     }
 
-    function test_poke(
+    function test_poke_basic(
         uint128 chronicleVal,
         uint128 chainlinkVal,
         uint chainlinkAgeSeed,
@@ -140,7 +156,16 @@ abstract contract IAggorTest is Test {
         // Wait for some time.
         vm.warp(block.timestamp + warp);
 
-        uint mean = (uint(chronicleVal) + uint(chainlinkVal)) / 2;
+        (, uint curr) = aggor.tryRead();
+        uint mean;
+        uint pof = _pctdiff(chainlinkVal, chronicleVal);
+        if (pof > 0 && pof > aggor.spread()) {
+            mean = _distance(curr, chronicleVal) < _distance(curr, chainlinkVal)
+                ? chronicleVal
+                : chainlinkVal;
+        } else {
+            mean = (uint(chronicleVal) + uint(chainlinkVal)) / 2;
+        }
         _checkReadFunctions({wantVal: uint128(mean), wantAge: age});
     }
 
@@ -228,6 +253,7 @@ abstract contract IAggorTest is Test {
     function test_poke_ChainlinkDecimalConversion() public {
         uint want;
         uint val;
+        aggor.setSpread(pscale);
 
         // Case 1: chainlink.decimals < 18.
         _setValAndAge(10e17, block.timestamp);

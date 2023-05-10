@@ -31,6 +31,10 @@ contract Aggor is IAggor, Auth, Toll {
     /// @inheritdoc IAggor
     uint public stalenessThreshold = 1 days;
 
+    /// @inheritdoc IAggor
+    uint public spread = 500;
+
+    // This is the last agreed upon mean price.
     uint128 private _val;
     uint32 private _age;
 
@@ -72,6 +76,17 @@ contract Aggor is IAggor, Auth, Toll {
             revert OracleReadFailed(chainlink);
         }
         assert(valChainlink <= type(uint128).max);
+
+        // Check for suspicious deviation between oracles. Whichever price is
+        // nearest the previously agreed upon mean becomes _val.
+        uint checkSpread = _pctdiff(valChronicle, valChainlink);
+        if (checkSpread > 0 && checkSpread > spread) {
+            _val = _distance(_val, valChronicle) < _distance(_val, valChainlink)
+                ? uint128(valChronicle)
+                : uint128(valChainlink);
+            _age = uint32(block.timestamp);
+            return;
+        }
 
         // Compute mean.
         // Unsafe ok because both arguments are <= type(uint128).max.
@@ -141,6 +156,18 @@ contract Aggor is IAggor, Auth, Toll {
         }
     }
 
+    /// @inheritdoc IAggor
+    function setSpread(uint spread_) external auth {
+        require(spread != spread_);
+
+        emit SpreadUpdated(msg.sender, spread_, spread);
+        if (spread_ >= pscale) {
+            spread = pscale;
+        } else {
+            spread = spread_;
+        }
+    }
+
     // -- Private Helpers --
 
     function _tryReadChronicle() private view returns (bool, uint) {
@@ -199,6 +226,25 @@ contract Aggor is IAggor, Auth, Toll {
             mean = (a + b) >> 1;
         }
         return mean;
+    }
+
+    uint constant pscale = 10_000;
+
+    /// @dev Compute the percent difference of two numbers with a precision of
+    ///      pscale (99.99%).
+    function _pctdiff(uint a, uint b) private pure returns (uint) {
+        if (a == b) return 0;
+        return a > b
+            ? pscale - (((b * 1e18) / a) * pscale / 1e18)
+            : pscale - (((a * 1e18) / b) * pscale / 1e18);
+    }
+
+    /// @dev Compute the numerical distance between two numbers. No overflow
+    ///      worries here.
+    function _distance(uint a, uint b) private pure returns (uint) {
+        unchecked {
+            return (a > b) ? a - b : b - a;
+        }
     }
 
     // -- Overridden Toll Functions --
