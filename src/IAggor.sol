@@ -17,6 +17,11 @@ interface IAggor is IChronicle {
         uint newStalenessThreshold
     );
 
+    /// @notice Emitted when spread is updated
+    /// @param oldSpread The old spread value.
+    /// @param newSpread The new spread value.
+    event SpreadUpdated(address indexed caller, uint oldSpread, uint newSpread);
+
     /// @notice Emitted when Chainlink's oracle delivered a stale value.
     /// @param age The age of Chainlink's oracle value.
     /// @param timestamp The timestamp when the Chainlink oracle was read.
@@ -81,4 +86,18 @@ interface IAggor is IChronicle {
     /// @dev Reverts if `stalenessThreshold` is zero.
     /// @param stalenessThreshold The value to update stalenessThreshold to.
     function setStalenessThreshold(uint stalenessThreshold) external;
+
+    /// @notice The percentage difference between the price gotten from
+    ///         oracles, used as a trigger to detect a potentially
+    ///         compromised oracle.
+    /// @dev The percent spread (difference in price) we can tolerate between
+    ///      sources. If the difference is over this amount, assume one of the
+    ///      sources is sussy. Defaults to 5%. Acceptable range 0 - 9999 (99.99%).
+    /// @return The spread as a percentage difference between oracle prices
+    function spread() external view returns (uint);
+
+    /// @notice Updates the spread parameter to `spread`.
+    /// @dev Only callable by auth'ed address.
+    /// @param spread The value to which to update spread.
+    function setSpread(uint spread) external;
 }
