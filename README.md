@@ -12,7 +12,7 @@ The `poke()` function pulls the price from the price _sources_ and if there is n
 
 ## readWithAge()
 
-The recommended way to access the value produced by `poke()` is 
+The recommended way to access the value produced by `poke()` is
 
 ```
     function readWithAge() external view toll returns (uint256, uint256)
@@ -26,7 +26,7 @@ Because this contract provides the price of more than one oracle source (current
 
 ### Maker/Chronicle
 
-If the consumer is using the Maker style median oracle, they can use 
+If the consumer is using the Maker style median oracle, they can use
 
 ```
 function read() external view returns (uint256)
@@ -41,31 +41,67 @@ function latestAnswer() external view returns (int256); // deprecated
 
 Note that in all cases, we are returning the _mean_ value of the two sources, UNLESS there was a deviation from one oracle source, in which we will defer to the other source.
 
+## Installation
+
+Install module via Foundry:
+```bash
+$ forge install chronicleprotocol/aggor
+```
+
+## Contributing
+
+The project uses the Foundry toolchain. You can find installation instructions [here](https://getfoundry.sh/).
+
+Setup:
+```bash
+$ git clone https://github.com/chronicleprotocol/aggor
+$ cd aggor/
+$ forge install
+```
+
+Run tests:
+```bash
+$ forge test
+$ forge test -vvvv # Run with full stack traces
+$ FOUNDRY_PROFILE=intense forge test # Run in intense mode
+```
+
+Lint:
+```bash
+$ forge fmt [--check]
+```
+
+Update gas snapshots:
+```bash
+$ forge snapshot --nmt "Fuzz" [--check]
+```
+
 # Gas report
 
 ```
-Gas report taken Wed May 10 17:44:18 UTC 2023
+Gas report taken Wed May 17 10:26:20 UTC 2023
 forge t --gas-report --match-test poke_basic
 [⠒] Compiling...
 No files changed, compilation skipped
 
 Running 1 test for test/Aggor.t.sol:AggorTest
-[PASS] test_poke_basic(uint128,uint128,uint256,uint256) (runs: 256, μ: 137921, ~: 136802)
-Test result: ok. 1 passed; 0 failed; finished in 35.61ms
+[PASS] testFuzz_poke_basic(uint128,uint128,uint256,uint256) (runs: 256, μ: 140317, ~: 140442)
+Test result: ok. 1 passed; 0 failed; finished in 44.33ms
 | src/Aggor.sol:Aggor contract |                 |       |        |       |         |
 |------------------------------|-----------------|-------|--------|-------|---------|
 | Deployment Cost              | Deployment Size |       |        |       |         |
-| 1218100                      | 6120            |       |        |       |         |
+| 1246124                      | 6422            |       |        |       |         |
 | Function Name                | min             | avg   | median | max   | # calls |
-| chainlink                    | 488             | 488   | 488    | 488   | 1       |
-| chronicle                    | 532             | 532   | 532    | 532   | 1       |
-| kiss                         | 69099           | 69099 | 69099  | 69099 | 1       |
-| latestAnswer                 | 645             | 645   | 645    | 645   | 1       |
-| latestRoundData              | 1046            | 1046  | 1046   | 1046  | 1       |
-| poke                         | 29949           | 29949 | 29949  | 29949 | 1       |
-| read                         | 686             | 686   | 686    | 686   | 1       |
-| readWithAge                  | 605             | 605   | 605    | 605   | 1       |
-| stalenessThreshold           | 2654            | 2654  | 2654   | 2654  | 1       |
-| tryRead                      | 511             | 1511  | 1511   | 2511  | 2       |
-| tryReadWithAge               | 969             | 969   | 969    | 969   | 1       |
+| chainlink                    | 524             | 524   | 524    | 524   | 1       |
+| chronicle                    | 568             | 568   | 568    | 568   | 1       |
+| kiss                         | 69135           | 69135 | 69135  | 69135 | 1       |
+| latestAnswer                 | 681             | 681   | 681    | 681   | 1       |
+| latestRoundData              | 1085            | 1085  | 1085   | 1085  | 1       |
+| poke                         | 32275           | 32275 | 32275  | 32275 | 1       |
+| read                         | 722             | 722   | 722    | 722   | 1       |
+| readWithAge                  | 641             | 641   | 641    | 641   | 1       |
+| spread                       | 536             | 536   | 536    | 536   | 1       |
+| stalenessThreshold           | 2690            | 2690  | 2690   | 2690  | 1       |
+| tryRead                      | 525             | 1525  | 1525   | 2525  | 2       |
+| tryReadWithAge               | 1005            | 1005  | 1005   | 1005  | 1       |
 ```
