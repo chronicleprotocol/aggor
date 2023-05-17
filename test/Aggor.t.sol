@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.16;
 
-import {IAggorTest} from "./IAggorTest.sol";
-
 import {Aggor} from "src/Aggor.sol";
+
+import {IAggorTest} from "./IAggorTest.sol";
 
 import {MockIChronicle} from "./mocks/MockIChronicle.sol";
 import {MockIChainlinkAggregatorV3} from

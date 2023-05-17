@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.16;
 
-import {IChronicle} from "src/interfaces/_external/IChronicle.sol";
+import {IChronicle} from "chronicle-std/IChronicle.sol";
 
 contract MockIChronicle is IChronicle {
     bytes32 public wat;
