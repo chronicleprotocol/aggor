@@ -18,6 +18,12 @@ import {IChainlinkAggregatorV3} from
  *         value
  */
 contract Aggor is IAggor, Auth, Toll {
+    /// @dev Percentage scale is in basis points (BPS).
+    uint internal constant _pscale = 10_000;
+
+    /// @inheritdoc IAggor
+    uint8 public constant decimals = 18;
+
     /// @inheritdoc IChronicle
     bytes32 public immutable wat;
 
@@ -28,10 +34,10 @@ contract Aggor is IAggor, Auth, Toll {
     address public immutable chainlink;
 
     /// @inheritdoc IAggor
-    uint public stalenessThreshold = 1 days;
+    uint public stalenessThreshold;
 
     /// @inheritdoc IAggor
-    uint public spread = 500;
+    uint public spread;
 
     // This is the last agreed upon mean price.
     uint128 private _val;
@@ -46,6 +52,9 @@ contract Aggor is IAggor, Auth, Toll {
 
         // Note that IChronicle::wat() is a constant and save to cache.
         wat = IChronicle(chronicle_).wat();
+
+        setStalenessThreshold(1 days);
+        setSpread(500);
     }
 
     /// @inheritdoc IAggor
@@ -53,8 +62,12 @@ contract Aggor is IAggor, Auth, Toll {
         _poke();
     }
 
-    // @todo Here will soon be a `poke_optimized_<longNumber>` function.
-    //       With a function selector of 0x00000000 :)
+    /// @dev Optimized function selector: 0x00000000.
+    ///      Note that this function is _not_ defined via the IAggor interface
+    ///      and one should _not_ depend on it.
+    function poke_optimized_3923566589() external {
+        _poke();
+    }
 
     function _poke() internal {
         bool ok;
@@ -130,11 +143,22 @@ contract Aggor is IAggor, Auth, Toll {
     function latestRoundData()
         external
         view
+        virtual
         toll
-        returns (uint80, int, uint, uint, uint80)
+        returns (
+            uint80 roundId,
+            int answer,
+            uint startedAt,
+            uint updatedAt,
+            uint80 answeredInRound
+        )
     {
-        // @todo Reminder to evaluate whether zero should be returned or not.
-        return (0, _toInt(_val), 0, _age, 0);
+        roundId = 1;
+        answer = _toInt(_val);
+        assert(uint(answer) == uint(_val));
+        startedAt = 0;
+        updatedAt = _age;
+        answeredInRound = roundId;
     }
 
     /// @inheritdoc IAggor
@@ -145,7 +169,7 @@ contract Aggor is IAggor, Auth, Toll {
     // -- Auth'ed Functionality --
 
     /// @inheritdoc IAggor
-    function setStalenessThreshold(uint stalenessThreshold_) external auth {
+    function setStalenessThreshold(uint stalenessThreshold_) public auth {
         require(stalenessThreshold_ != 0);
 
         if (stalenessThreshold != stalenessThreshold_) {
@@ -157,13 +181,11 @@ contract Aggor is IAggor, Auth, Toll {
     }
 
     /// @inheritdoc IAggor
-    function setSpread(uint spread_) external auth {
-        require(spread != spread_);
+    function setSpread(uint spread_) public auth {
+        require(spread_ <= _pscale);
 
-        emit SpreadUpdated(msg.sender, spread_, spread);
-        if (spread_ >= pscale) {
-            spread = pscale;
-        } else {
+        if (spread != spread_) {
+            emit SpreadUpdated(msg.sender, spread, spread_);
             spread = spread_;
         }
     }
@@ -195,13 +217,13 @@ contract Aggor is IAggor, Auth, Toll {
 
         // Adjust decimals, if necessary.
         uint val;
-        uint decimals = IChainlinkAggregatorV3(chainlink).decimals();
-        if (decimals == 18) {
+        uint decimals_ = IChainlinkAggregatorV3(chainlink).decimals();
+        if (decimals_ == 18) {
             val = uint(answer);
-        } else if (decimals < 18) {
-            val = uint(answer) * (10 ** (18 - decimals));
+        } else if (decimals_ < 18) {
+            val = uint(answer) * (10 ** (18 - decimals_));
         } else {
-            val = uint(answer) / (10 ** (decimals - 18));
+            val = uint(answer) / (10 ** (decimals_ - 18));
         }
 
         // Fail if value is zero.
@@ -228,15 +250,13 @@ contract Aggor is IAggor, Auth, Toll {
         return mean;
     }
 
-    uint constant pscale = 10_000;
-
     /// @dev Compute the percent difference of two numbers with a precision of
-    ///      pscale (99.99%).
+    ///      _pscale (99.99%).
     function _pctdiff(uint a, uint b) private pure returns (uint) {
         if (a == b) return 0;
         return a > b
-            ? pscale - (((b * 1e18) / a) * pscale / 1e18)
-            : pscale - (((a * 1e18) / b) * pscale / 1e18);
+            ? _pscale - (((b * 1e18) / a) * _pscale / 1e18)
+            : _pscale - (((a * 1e18) / b) * _pscale / 1e18);
     }
 
     /// @dev Compute the numerical distance between two numbers. No overflow

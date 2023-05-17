@@ -23,6 +23,7 @@ abstract contract IAggorTest is Test {
         uint oldStalenessThreshold,
         uint newStalenessThreshold
     );
+    event SpreadUpdated(address indexed caller, uint oldSpread, uint newSpread);
     event ChainlinkValueStale(uint age, uint timestamp);
     event ChainlinkValueNegative(int value);
     event ChainlinkValueZero();
@@ -38,13 +39,13 @@ abstract contract IAggorTest is Test {
     }
 
     // Copied from Aggor.sol
-    uint constant pscale = 10_000;
+    uint internal constant _pscale = 10_000;
 
     function _pctdiff(uint a, uint b) private pure returns (uint) {
         if (a == b) return 0;
         return a > b
-            ? pscale - (((b * 1e18) / a) * pscale / 1e18)
-            : pscale - (((a * 1e18) / b) * pscale / 1e18);
+            ? _pscale - (((b * 1e18) / a) * _pscale / 1e18)
+            : _pscale - (((a * 1e18) / b) * _pscale / 1e18);
     }
 
     function _distance(uint a, uint b) private pure returns (uint) {
@@ -63,6 +64,12 @@ abstract contract IAggorTest is Test {
 
         // StalenessThreshold set.
         assertTrue(aggor.stalenessThreshold() != 0);
+
+        // Spread set.
+        assertTrue(aggor.spread() != 0);
+
+        // IChainlink::decimals() set.
+        assertEq(aggor.decimals(), uint8(18));
 
         // No value set.
         bool ok;
@@ -110,12 +117,12 @@ abstract contract IAggorTest is Test {
         // IChainlinkAggregatorV3::latestRoundData
         (roundId, answer, startedAt, updatedAt, answeredInRound) =
             aggor.latestRoundData();
-        assertEq(roundId, 0);
+        assertEq(roundId, 1);
         assertTrue(answer > 0);
         assertEq(uint128(uint(answer)), wantVal);
         assertEq(startedAt, 0);
         assertEq(updatedAt, wantAge);
-        assertEq(answeredInRound, 0);
+        assertEq(answeredInRound, 1);
 
         // IChainlinkAggregatorV3::latestAnswer
         answer = aggor.latestAnswer();
@@ -123,7 +130,7 @@ abstract contract IAggorTest is Test {
         assertEq(uint128(uint(answer)), wantVal);
     }
 
-    function test_poke_basic(
+    function testFuzz_poke_basic(
         uint128 chronicleVal,
         uint128 chainlinkVal,
         uint chainlinkAgeSeed,
@@ -169,7 +176,7 @@ abstract contract IAggorTest is Test {
         _checkReadFunctions({wantVal: uint128(mean), wantAge: age});
     }
 
-    function test_poke_FailsIf_ChronicleValueZero(uint128 val) public {
+    function testFuzz_poke_FailsIf_ChronicleValueZero(uint128 val) public {
         vm.assume(val != 0);
         _setValAndAge(val, uint32(block.timestamp));
 
@@ -184,7 +191,7 @@ abstract contract IAggorTest is Test {
         aggor.poke();
     }
 
-    function test_poke_FailsIf_ChainlinkValueZero(uint128 val) public {
+    function testFuzz_poke_FailsIf_ChainlinkValueZero(uint128 val) public {
         vm.assume(val != 0);
         _setValAndAge(val, uint32(block.timestamp));
 
@@ -202,7 +209,7 @@ abstract contract IAggorTest is Test {
         aggor.poke();
     }
 
-    function test_poke_FailsIf_ChainlinkValueStale(
+    function testFuzz_poke_FailsIf_ChainlinkValueStale(
         uint128 val,
         uint chainlinkAgeSeed
     ) public {
@@ -228,7 +235,7 @@ abstract contract IAggorTest is Test {
         aggor.poke();
     }
 
-    function test_poke_FailsIf_ChainlinkValueNegative(
+    function testFuzz_poke_FailsIf_ChainlinkValueNegative(
         uint128 val,
         int chainlinkValSeed
     ) public {
@@ -253,7 +260,7 @@ abstract contract IAggorTest is Test {
     function test_poke_ChainlinkDecimalConversion() public {
         uint want;
         uint val;
-        aggor.setSpread(pscale);
+        aggor.setSpread(_pscale);
 
         // Case 1: chainlink.decimals < 18.
         _setValAndAge(10e17, block.timestamp);
@@ -302,7 +309,7 @@ abstract contract IAggorTest is Test {
 
     // -- Auth'ed Functionality --
 
-    function test_setStalenessThreshold(uint stalenessThreshold) public {
+    function testFuzz_setStalenessThreshold(uint stalenessThreshold) public {
         vm.assume(stalenessThreshold != 0);
 
         if (aggor.stalenessThreshold() != stalenessThreshold) {
@@ -329,6 +336,35 @@ abstract contract IAggorTest is Test {
             )
         );
         aggor.setStalenessThreshold(1);
+    }
+
+    function testFuzz_setSpread(uint spread) public {
+        vm.assume(spread <= _pscale);
+
+        if (aggor.spread() != spread) {
+            vm.expectEmit();
+            emit SpreadUpdated(address(this), aggor.spread(), spread);
+        }
+
+        aggor.setSpread(spread);
+        assertEq(aggor.spread(), spread);
+    }
+
+    function testFuzz_setSpread_FailsIf_IsBiggerThanPScal(uint spread) public {
+        vm.assume(spread > _pscale);
+
+        vm.expectRevert();
+        aggor.setSpread(spread);
+    }
+
+    function test_setSpread_IsAuthProtected() public {
+        vm.prank(address(0xbeef));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAuth.NotAuthorized.selector, address(0xbeef)
+            )
+        );
+        aggor.setSpread(1);
     }
 
     // -- Private Helpers --
