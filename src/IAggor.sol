@@ -9,6 +9,7 @@ interface IAggor is IChronicle {
     error OracleReadFailed(address oracle);
 
     /// @notice Emitted when staleness threshold updated.
+    /// @param caller The caller's address.
     /// @param oldStalenessThreshold The old staleness threshold.
     /// @param newStalenessThreshold The new staleness threshold.
     event StalenessThresholdUpdated(
@@ -17,7 +18,8 @@ interface IAggor is IChronicle {
         uint newStalenessThreshold
     );
 
-    /// @notice Emitted when spread is updated
+    /// @notice Emitted when spread is updated.
+    /// @param caller The caller's address.
     /// @param oldSpread The old spread value.
     /// @param newSpread The new spread value.
     event SpreadUpdated(address indexed caller, uint oldSpread, uint newSpread);
@@ -51,14 +53,20 @@ interface IAggor is IChronicle {
     ///      staleness threshold.
     function poke() external;
 
+    /// @notice Returns the number of decimals of the oracle's value.
+    /// @dev Provides partial compatibility with Chainlink's
+    ///      IAggregatorV3Interface.
+    /// @return decimals The oracle value's number of decimals.
+    function decimals() external view returns (uint8 decimals);
+
     /// @notice Returns the oracle's latest value.
     /// @dev Provides partial compatibility to Chainlink's
     ///      IAggregatorV3Interface.
-    /// @return roundId 0.
+    /// @return roundId 1.
     /// @return answer The oracle's latest value.
     /// @return startedAt 0.
     /// @return updatedAt The timestamp of oracle's latest update.
-    /// @return answeredInRound 0.
+    /// @return answeredInRound 1.
     function latestRoundData()
         external
         view
@@ -98,6 +106,7 @@ interface IAggor is IChronicle {
 
     /// @notice Updates the spread parameter to `spread`.
     /// @dev Only callable by auth'ed address.
+    /// @dev Revert is `spread` is more than 10000.
     /// @param spread The value to which to update spread.
     function setSpread(uint spread) external;
 }
