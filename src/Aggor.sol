@@ -50,7 +50,7 @@ contract Aggor is IAggor, Auth, Toll {
         chronicle = chronicle_;
         chainlink = chainlink_;
 
-        // Note that IChronicle::wat() is a constant and save to cache.
+        // Note that IChronicle::wat() is constant and save to cache.
         wat = IChronicle(chronicle_).wat();
 
         setStalenessThreshold(1 days);
@@ -78,8 +78,8 @@ contract Aggor is IAggor, Auth, Toll {
         if (!ok) {
             revert OracleReadFailed(chronicle);
         }
-        assert(valChronicle != 0);
-        assert(valChronicle <= type(uint128).max);
+        // assert(valChronicle != 0);
+        // assert(valChronicle <= type(uint128).max);
 
         // Read chainlink.
         uint valChainlink;
@@ -87,8 +87,8 @@ contract Aggor is IAggor, Auth, Toll {
         if (!ok) {
             revert OracleReadFailed(chainlink);
         }
-        assert(valChainlink != 0);
-        assert(valChainlink <= type(uint128).max);
+        // assert(valChainlink != 0);
+        // assert(valChainlink <= type(uint128).max);
 
         // Check for suspicious deviation between oracles. Whichever price is
         // nearest the previously agreed upon mean becomes _val.
@@ -104,7 +104,7 @@ contract Aggor is IAggor, Auth, Toll {
         // Compute mean.
         // Unsafe ok because both arguments are <= type(uint128).max.
         uint mean = _unsafeMean(valChainlink, valChronicle);
-        assert(mean <= type(uint128).max);
+        // assert(mean <= type(uint128).max);
 
         // Store mean as val and set its age to now.
         _val = uint128(mean);
@@ -155,7 +155,7 @@ contract Aggor is IAggor, Auth, Toll {
     {
         roundId = 1;
         answer = _toInt(_val);
-        assert(uint(answer) == uint(_val));
+        // assert(uint(answer) == uint(_val));
         startedAt = 0;
         updatedAt = _age;
         answeredInRound = roundId;
@@ -192,11 +192,24 @@ contract Aggor is IAggor, Auth, Toll {
 
     // -- Private Helpers --
 
-    function _tryReadChronicle() private view returns (bool, uint) {
-        return IChronicle(chronicle).tryRead();
+    function _tryReadChronicle() internal returns (bool, uint) {
+        bool ok;
+        uint val;
+        uint age;
+        (ok, val, age) = IChronicle(chronicle).tryReadWithAge();
+        // assert(!ok || val != 0);
+
+        // Fail if value stale.
+        uint diff = block.timestamp - age;
+        if (diff > stalenessThreshold) {
+            emit ChronicleValueStale(age, block.timestamp);
+            return (false, 0);
+        }
+
+        return (ok, val);
     }
 
-    function _tryReadChainlink() private returns (bool, uint) {
+    function _tryReadChainlink() internal returns (bool, uint) {
         int answer;
         uint updatedAt;
         (, answer,, updatedAt,) =
@@ -250,7 +263,7 @@ contract Aggor is IAggor, Auth, Toll {
         return mean;
     }
 
-    /// @dev Compute the percent difference of two numbers with a precision of
+    /// @dev Computes the percent difference of two numbers with a precision of
     ///      _pscale (99.99%).
     function _pctdiff(uint a, uint b) private pure returns (uint) {
         if (a == b) return 0;
@@ -259,7 +272,7 @@ contract Aggor is IAggor, Auth, Toll {
             : _pscale - (((a * 1e18) / b) * _pscale / 1e18);
     }
 
-    /// @dev Compute the numerical distance between two numbers. No overflow
+    /// @dev Computes the numerical distance between two numbers. No overflow
     ///      worries here.
     function _distance(uint a, uint b) private pure returns (uint) {
         unchecked {

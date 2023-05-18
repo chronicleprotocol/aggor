@@ -24,6 +24,11 @@ interface IAggor is IChronicle {
     /// @param newSpread The new spread value.
     event SpreadUpdated(address indexed caller, uint oldSpread, uint newSpread);
 
+    /// @notice Emitted when Chronicle's oracle delivered a stale value.
+    /// @param age The age of Chronicle's oracle value.
+    /// @param timestamp The timestamp when the Chronicle oracle was read.
+    event ChronicleValueStale(uint age, uint timestamp);
+
     /// @notice Emitted when Chainlink's oracle delivered a stale value.
     /// @param age The age of Chainlink's oracle value.
     /// @param timestamp The timestamp when the Chainlink oracle was read.
