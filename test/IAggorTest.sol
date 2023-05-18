@@ -18,12 +18,14 @@ abstract contract IAggorTest is Test {
     MockIChronicle chronicle;
     MockIChainlinkAggregatorV3 chainlink;
 
+    // Copied from IAggor.
     event StalenessThresholdUpdated(
         address indexed caller,
         uint oldStalenessThreshold,
         uint newStalenessThreshold
     );
     event SpreadUpdated(address indexed caller, uint oldSpread, uint newSpread);
+    event ChronicleValueStale(uint age, uint timestamp);
     event ChainlinkValueStale(uint age, uint timestamp);
     event ChainlinkValueNegative(int value);
     event ChainlinkValueZero();
@@ -68,7 +70,7 @@ abstract contract IAggorTest is Test {
         // Spread set.
         assertTrue(aggor.spread() != 0);
 
-        // IChainlink::decimals() set.
+        // IChainlinkAggregatorV3::decimals() set.
         assertEq(aggor.decimals(), uint8(18));
 
         // No value set.
@@ -134,6 +136,7 @@ abstract contract IAggorTest is Test {
         uint128 chronicleVal,
         uint128 chainlinkVal,
         uint chainlinkAgeSeed,
+        uint chronicleAgeSeed,
         uint warp
     ) public {
         vm.assume(chronicleVal != 0);
@@ -149,11 +152,21 @@ abstract contract IAggorTest is Test {
             )
         );
 
+        // Make sure chronicle'a age is not stale.
+        uint32 chronicleAge = uint32(
+            bound(
+                chronicleAgeSeed,
+                block.timestamp - aggor.stalenessThreshold(),
+                block.timestamp
+            )
+        );
+
         uint32 age = uint32(block.timestamp);
         age++; // Note to use variable before warp as --via-ir optimization may
         age--; // optimize it away. solc doesn't know about vm.warp().
 
         chronicle.setVal(chronicleVal);
+        chronicle.setAge(chronicleAge);
 
         chainlink.setAnswer(int(uint(chainlinkVal)));
         chainlink.setUpdatedAt(chainlinkAge);
@@ -182,6 +195,32 @@ abstract contract IAggorTest is Test {
 
         // Let chronicle's val to zero.
         chronicle.setVal(0);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAggor.OracleReadFailed.selector, address(chronicle)
+            )
+        );
+        aggor.poke();
+    }
+
+    function testFuzz_poke_FailsIf_ChronicleValueStale(
+        uint128 val,
+        uint chronicleAgeSeed
+    ) public {
+        vm.assume(val != 0);
+        _setValAndAge(val, uint32(block.timestamp));
+
+        // Let chronicle's age be stale.
+        uint chronicleAge = bound(
+            chronicleAgeSeed,
+            0,
+            block.timestamp - aggor.stalenessThreshold() - 1
+        );
+        chronicle.setAge(chronicleAge);
+
+        vm.expectEmit();
+        emit ChronicleValueStale(chronicleAge, block.timestamp);
 
         vm.expectRevert(
             abi.encodeWithSelector(
@@ -283,7 +322,9 @@ abstract contract IAggorTest is Test {
         assertEq(val, want);
     }
 
-    // -- IChronicle Read Functionality --
+    // -- Read Functionality --
+
+    // -- IChronicle
 
     function test_read_FailsIfValIsZero() public {
         vm.expectRevert();
@@ -305,6 +346,56 @@ abstract contract IAggorTest is Test {
         bool ok;
         (ok,,) = aggor.tryReadWithAge();
         assertFalse(ok);
+    }
+
+    // -- Toll Protection
+
+    function test_read_IsTollProtected() public {
+        vm.prank(address(0xbeef));
+        vm.expectRevert(
+            abi.encodeWithSelector(IToll.NotTolled.selector, address(0xbeef))
+        );
+        aggor.read();
+    }
+
+    function test_tryRead_IsTollProtected() public {
+        vm.prank(address(0xbeef));
+        vm.expectRevert(
+            abi.encodeWithSelector(IToll.NotTolled.selector, address(0xbeef))
+        );
+        aggor.tryRead();
+    }
+
+    function test_readWithAge_IsTollProtected() public {
+        vm.prank(address(0xbeef));
+        vm.expectRevert(
+            abi.encodeWithSelector(IToll.NotTolled.selector, address(0xbeef))
+        );
+        aggor.readWithAge();
+    }
+
+    function test_tryReadWithAge_IsTollProtected() public {
+        vm.prank(address(0xbeef));
+        vm.expectRevert(
+            abi.encodeWithSelector(IToll.NotTolled.selector, address(0xbeef))
+        );
+        aggor.tryReadWithAge();
+    }
+
+    function test_latestRoundData_IsTollProtected() public {
+        vm.prank(address(0xbeef));
+        vm.expectRevert(
+            abi.encodeWithSelector(IToll.NotTolled.selector, address(0xbeef))
+        );
+        aggor.latestRoundData();
+    }
+
+    function test_latestAnswer_IsTollProtected() public {
+        vm.prank(address(0xbeef));
+        vm.expectRevert(
+            abi.encodeWithSelector(IToll.NotTolled.selector, address(0xbeef))
+        );
+        aggor.latestAnswer();
     }
 
     // -- Auth'ed Functionality --
@@ -350,7 +441,9 @@ abstract contract IAggorTest is Test {
         assertEq(aggor.spread(), spread);
     }
 
-    function testFuzz_setSpread_FailsIf_IsBiggerThanPScal(uint spread) public {
+    function testFuzz_setSpread_FailsIf_SpreadBiggerThanPScale(uint spread)
+        public
+    {
         vm.assume(spread > _pscale);
 
         vm.expectRevert();
@@ -376,6 +469,7 @@ abstract contract IAggorTest is Test {
         );
 
         chronicle.setVal(val);
+        chronicle.setAge(age);
 
         chainlink.setAnswer(int(val));
         chainlink.setUpdatedAt(age);
