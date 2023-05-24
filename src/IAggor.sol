@@ -14,15 +14,17 @@ interface IAggor is IChronicle {
     /// @param newStalenessThreshold The new staleness threshold.
     event StalenessThresholdUpdated(
         address indexed caller,
-        uint oldStalenessThreshold,
-        uint newStalenessThreshold
+        uint32 oldStalenessThreshold,
+        uint32 newStalenessThreshold
     );
 
     /// @notice Emitted when spread is updated.
     /// @param caller The caller's address.
     /// @param oldSpread The old spread value.
     /// @param newSpread The new spread value.
-    event SpreadUpdated(address indexed caller, uint oldSpread, uint newSpread);
+    event SpreadUpdated(
+        address indexed caller, uint16 oldSpread, uint16 newSpread
+    );
 
     /// @notice Emitted when Chronicle's oracle delivered a stale value.
     /// @param age The age of Chronicle's oracle value.
@@ -41,6 +43,12 @@ interface IAggor is IChronicle {
     /// @notice Emitted when Chainlink's oracle delivered a zero value.
     event ChainlinkValueZero();
 
+    /// @notice Emitted when Uniswap's oracle delivered a zero value.
+    event UniswapValueZero();
+
+    /// @notice Emitted when Uniswap's oracle has not been setup.
+    event UniswapNotConfigured();
+
     /// @notice The Chronicle oracle to aggregate.
     /// @return The address of the Chronicle oracle being aggregated.
     function chronicle() external view returns (address);
@@ -48,6 +56,24 @@ interface IAggor is IChronicle {
     /// @notice The Chainlink oracle to aggregate.
     /// @return The address of the Chainlink oracle being aggregated.
     function chainlink() external view returns (address);
+
+    /// @notice The Uniswap pool that wil be observed.
+    function uniPool() external view returns (address);
+
+    /// @notice The base pair for the pool, e.g. WETH in WETHUSDT.
+    function uniBasePair() external view returns (address);
+
+    /// @notice The quote pair for the pool, e.g. USDT in WETHUSDT.
+    function uniQuotePair() external view returns (address);
+
+    /// @notice The decimals of the base pair ERC-20 token.
+    function uniBaseDec() external view returns (uint8);
+
+    /// @notice The decimals of the quote pair ERC-20 token.
+    function uniQuoteDec() external view returns (uint8);
+
+    /// @notice secondsAgo The time in seconds to "look back" per TWAP.
+    function uniSecondsAgo() external view returns (uint32);
 
     /// @notice Pokes aggor, i.e. updates aggor's value to the mean of
     ///         Chronicle's and Chainlink's current values.
@@ -91,14 +117,14 @@ interface IAggor is IChronicle {
     /// @notice Defines the allowed age of an oracle's value before being
     ///         declared stale.
     /// @return The staleness threshold parameter.
-    function stalenessThreshold() external view returns (uint);
+    function stalenessThreshold() external view returns (uint32);
 
     /// @notice Updates the staleness threshold parameter to
     ///         `stalenessThreshold`.
     /// @dev Only callable by auth'ed address.
     /// @dev Reverts if `stalenessThreshold` is zero.
     /// @param stalenessThreshold The value to update stalenessThreshold to.
-    function setStalenessThreshold(uint stalenessThreshold) external;
+    function setStalenessThreshold(uint32 stalenessThreshold) external;
 
     /// @notice The percentage difference between the price gotten from
     ///         oracles, used as a trigger to detect a potentially
@@ -107,11 +133,24 @@ interface IAggor is IChronicle {
     ///      sources. If the difference is over this amount, assume one of the
     ///      sources is sussy. Defaults to 5%. Acceptable range 0 - 9999 (99.99%).
     /// @return The spread as a percentage difference between oracle prices
-    function spread() external view returns (uint);
+    function spread() external view returns (uint16);
 
     /// @notice Updates the spread parameter to `spread`.
     /// @dev Only callable by auth'ed address.
     /// @dev Revert is `spread` is more than 10000.
     /// @param spread The value to which to update spread.
-    function setSpread(uint spread) external;
+    function setSpread(uint16 spread) external;
+
+    /// @notice Switch from default oracle (Chainlink) to alt (Uniswap),
+    ///         and back.
+    /// @dev Only callable by auth'ed address.
+    /// @param uniPool Provide the address to the Uniswap pool. If set to
+    //         address(0) Uniswap will not be used.
+    function setUniswap(address uniPool) external;
+
+    /// @notice Set the Uniswap TWAP lookback period. If never called, default
+    //          is 5m.
+    /// @dev Only callable by auth'ed address.
+    /// @param uniSecondsAgo Time in seconds used in the TWAP lookback.
+    function setUniSecondsAgo(uint32 uniSecondsAgo) external;
 }
