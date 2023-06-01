@@ -8,6 +8,8 @@ import "uniswap/v3-periphery/contracts/libraries/OracleLibrary.sol";
  * @notice Library Uniswap oracle related functionality.
  */
 library LibUniswapOracles {
+    uint internal constant MAX_UNI_BASE_DEC = 38;
+
     /// @notice Read the TWAP derived price from a Uniswap oracle.
     /// @dev The Uniswap pool address + pair addresses can be discovered at
     ///      https://app.uniswap.org/#/swap
@@ -23,6 +25,9 @@ library LibUniswapOracles {
         uint8 uniBaseDec,
         uint32 secondsAgo
     ) internal view returns (uint) {
+        // Note that 10**(MAX_UNI_BASE_DEC + 1) would overflow type uint128.
+        require(uniBaseDec <= MAX_UNI_BASE_DEC);
+
         (int24 tick,) = OracleLibrary.consult(address(uniPool), secondsAgo);
 
         // Calculate exactly 1 unit of the base pair for quote

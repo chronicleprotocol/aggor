@@ -257,15 +257,16 @@ contract Aggor is IAggor, Auth, Toll {
             uniPool, uniBasePair, uniQuotePair, uniBaseDec, uniSecondsAgo
         );
 
-        // Fail if value is zero.
-        if (val == 0) {
-            emit UniswapValueZero();
-            return (false, 0);
-        }
-
         // We always scale to 'decimals', up OR down.
         if (uniQuoteDec != decimals) {
             val = LibCalc.scale(val, uniQuoteDec, decimals);
+        }
+
+        // Fail if value is zero.
+        // Note to check after scaling operation!
+        if (val == 0) {
+            emit UniswapValueZero();
+            return (false, 0);
         }
 
         return (true, val);
@@ -315,6 +316,7 @@ contract Aggor is IAggor, Auth, Toll {
         }
 
         // Fail if value is zero.
+        // Note to check after scaling operation!
         if (val == 0) {
             emit ChainlinkValueZero();
             return (false, 0);
