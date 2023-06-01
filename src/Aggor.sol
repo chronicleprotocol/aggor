@@ -30,6 +30,9 @@ contract Aggor is IAggor, Auth, Toll {
     uint16 internal constant _pscale = 10_000;
 
     /// @inheritdoc IAggor
+    uint32 public constant minUniSecondsAgo = 5 minutes;
+
+    /// @inheritdoc IAggor
     uint8 public constant decimals = 18;
 
     /// @inheritdoc IChronicle
@@ -57,7 +60,7 @@ contract Aggor is IAggor, Auth, Toll {
     uint8 public uniQuoteDec;
 
     /// @inheritdoc IAggor
-    uint32 public uniSecondsAgo = 300; // Default 5m
+    uint32 public uniSecondsAgo;
 
     /// @inheritdoc IAggor
     uint32 public stalenessThreshold;
@@ -80,7 +83,8 @@ contract Aggor is IAggor, Auth, Toll {
         wat = IChronicle(chronicle_).wat();
 
         setStalenessThreshold(1 days);
-        setSpread(500);
+        setSpread(500); // 5%
+        setUniSecondsAgo(5 minutes);
     }
 
     /// @inheritdoc IAggor
@@ -115,17 +119,15 @@ contract Aggor is IAggor, Auth, Toll {
             if (!ok) {
                 revert OracleReadFailed(chainlink);
             }
-            // assert(valOther != 0);
-            // assert(valOther <= type(uint128).max);
         } else {
             // Read Uniswap.
             (ok, valOther) = _tryReadUniswap();
             if (!ok) {
                 revert OracleReadFailed(uniPool);
             }
-            // assert(valOther != 0);
-            // assert(valOther <= type(uint128).max);
         }
+        // assert(valOther != 0);
+        // assert(valOther <= type(uint128).max);
 
         // Check for suspicious deviation between oracles. Whichever price is
         // nearest the previously agreed upon mean becomes _val.
@@ -231,18 +233,37 @@ contract Aggor is IAggor, Auth, Toll {
 
     /// @inheritdoc IAggor
     function setUniswap(address uniPool_) public auth {
+        if (uniPool == uniPool_) return;
+
+        // Update Uniswap pool variable.
+        emit UniswapUpdated(msg.sender, uniPool, uniPool_);
         uniPool = uniPool_;
-        if (uniPool != address(0)) {
+
+        if (uniPool_ != address(0)) {
+            // Set other Uniswap variables.
             uniBasePair = IUniswapV3PoolImmutables(uniPool).token0();
             uniQuotePair = IUniswapV3PoolImmutables(uniPool).token1();
             uniBaseDec = IERC20(uniBasePair).decimals();
             uniQuoteDec = IERC20(uniQuotePair).decimals();
+        } else {
+            // Delete other Uniswap variables.
+            delete uniBasePair;
+            delete uniQuotePair;
+            delete uniBaseDec;
+            delete uniQuoteDec;
         }
     }
 
     /// @inheritdoc IAggor
     function setUniSecondsAgo(uint32 uniSecondsAgo_) public auth {
-        if (uniSecondsAgo_ > 0) uniSecondsAgo = uniSecondsAgo_;
+        require(uniSecondsAgo_ >= minUniSecondsAgo);
+
+        if (uniSecondsAgo != uniSecondsAgo_) {
+            emit UniswapSecondsAgoUpdated(
+                msg.sender, uniSecondsAgo, uniSecondsAgo_
+            );
+            uniSecondsAgo = uniSecondsAgo_;
+        }
     }
 
     // -- Private Helpers --
