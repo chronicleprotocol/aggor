@@ -1,9 +1,17 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.16;
 
+import {IERC20} from "forge-std/interfaces/IERC20.sol";
+
+import {IUniswapV3PoolImmutables} from
+    "uniswap/v3-core/contracts/interfaces/pool/IUniswapV3PoolImmutables.sol";
+
 import {IChronicle} from "chronicle-std/IChronicle.sol";
 import {Auth} from "chronicle-std/auth/Auth.sol";
 import {Toll} from "chronicle-std/toll/Toll.sol";
+
+import {LibCalc} from "./libs/LibCalc.sol";
+import {LibUniswapOracles} from "./libs/LibUniswapOracles.sol";
 
 import {IAggor} from "./IAggor.sol";
 
@@ -19,7 +27,7 @@ import {IChainlinkAggregatorV3} from
  */
 contract Aggor is IAggor, Auth, Toll {
     /// @dev Percentage scale is in basis points (BPS).
-    uint internal constant _pscale = 10_000;
+    uint16 internal constant _pscale = 10_000;
 
     /// @inheritdoc IAggor
     uint8 public constant decimals = 18;
@@ -34,10 +42,28 @@ contract Aggor is IAggor, Auth, Toll {
     address public immutable chainlink;
 
     /// @inheritdoc IAggor
-    uint public stalenessThreshold;
+    address public uniPool;
 
     /// @inheritdoc IAggor
-    uint public spread;
+    address public uniBasePair;
+
+    /// @inheritdoc IAggor
+    address public uniQuotePair;
+
+    /// @inheritdoc IAggor
+    uint8 public uniBaseDec;
+
+    /// @inheritdoc IAggor
+    uint8 public uniQuoteDec;
+
+    /// @inheritdoc IAggor
+    uint32 public uniSecondsAgo = 300; // Default 5m
+
+    /// @inheritdoc IAggor
+    uint32 public stalenessThreshold;
+
+    /// @inheritdoc IAggor
+    uint16 public spread;
 
     // This is the last agreed upon mean price.
     uint128 private _val;
@@ -81,29 +107,42 @@ contract Aggor is IAggor, Auth, Toll {
         // assert(valChronicle != 0);
         // assert(valChronicle <= type(uint128).max);
 
-        // Read chainlink.
-        uint valChainlink;
-        (ok, valChainlink) = _tryReadChainlink();
-        if (!ok) {
-            revert OracleReadFailed(chainlink);
+        // Read second oracle, i.e. either Chainlink or Uniswap TWAP.
+        uint valOther;
+        if (uniPool == address(0)) {
+            // Read Chainlink.
+            (ok, valOther) = _tryReadChainlink();
+            if (!ok) {
+                revert OracleReadFailed(chainlink);
+            }
+            // assert(valOther != 0);
+            // assert(valOther <= type(uint128).max);
+        } else {
+            // Read Uniswap.
+            (ok, valOther) = _tryReadUniswap();
+            if (!ok) {
+                revert OracleReadFailed(uniPool);
+            }
+            // assert(valOther != 0);
+            // assert(valOther <= type(uint128).max);
         }
-        // assert(valChainlink != 0);
-        // assert(valChainlink <= type(uint128).max);
 
         // Check for suspicious deviation between oracles. Whichever price is
         // nearest the previously agreed upon mean becomes _val.
-        uint checkSpread = _pctdiff(valChronicle, valChainlink);
+        uint checkSpread =
+            LibCalc.pctDiff(uint128(valChronicle), uint128(valOther), _pscale);
         if (checkSpread > 0 && checkSpread > spread) {
-            _val = _distance(_val, valChronicle) < _distance(_val, valChainlink)
+            _val = LibCalc.distance(_val, valChronicle)
+                < LibCalc.distance(_val, valOther)
                 ? uint128(valChronicle)
-                : uint128(valChainlink);
+                : uint128(valOther);
             _age = uint32(block.timestamp);
             return;
         }
 
         // Compute mean.
         // Unsafe ok because both arguments are <= type(uint128).max.
-        uint mean = _unsafeMean(valChainlink, valChronicle);
+        uint mean = LibCalc.unsafeMean(valOther, valChronicle);
         // assert(mean <= type(uint128).max);
 
         // Store mean as val and set its age to now.
@@ -169,7 +208,7 @@ contract Aggor is IAggor, Auth, Toll {
     // -- Auth'ed Functionality --
 
     /// @inheritdoc IAggor
-    function setStalenessThreshold(uint stalenessThreshold_) public auth {
+    function setStalenessThreshold(uint32 stalenessThreshold_) public auth {
         require(stalenessThreshold_ != 0);
 
         if (stalenessThreshold != stalenessThreshold_) {
@@ -181,7 +220,7 @@ contract Aggor is IAggor, Auth, Toll {
     }
 
     /// @inheritdoc IAggor
-    function setSpread(uint spread_) public auth {
+    function setSpread(uint16 spread_) public auth {
         require(spread_ <= _pscale);
 
         if (spread != spread_) {
@@ -190,7 +229,47 @@ contract Aggor is IAggor, Auth, Toll {
         }
     }
 
+    /// @inheritdoc IAggor
+    function setUniswap(address uniPool_) public auth {
+        uniPool = uniPool_;
+        if (uniPool != address(0)) {
+            uniBasePair = IUniswapV3PoolImmutables(uniPool).token0();
+            uniQuotePair = IUniswapV3PoolImmutables(uniPool).token1();
+            uniBaseDec = IERC20(uniBasePair).decimals();
+            uniQuoteDec = IERC20(uniQuotePair).decimals();
+        }
+    }
+
+    /// @inheritdoc IAggor
+    function setUniSecondsAgo(uint32 uniSecondsAgo_) public auth {
+        if (uniSecondsAgo_ > 0) uniSecondsAgo = uniSecondsAgo_;
+    }
+
     // -- Private Helpers --
+
+    function _tryReadUniswap() internal returns (bool, uint) {
+        if (uniPool == address(0)) {
+            emit UniswapNotConfigured();
+            return (false, 0);
+        }
+
+        uint val = LibUniswapOracles.readOracle(
+            uniPool, uniBasePair, uniQuotePair, uniBaseDec, uniSecondsAgo
+        );
+
+        // Fail if value is zero.
+        if (val == 0) {
+            emit UniswapValueZero();
+            return (false, 0);
+        }
+
+        // We always scale to 'decimals', up OR down.
+        if (uniQuoteDec != decimals) {
+            val = LibCalc.scale(val, uniQuoteDec, decimals);
+        }
+
+        return (true, val);
+    }
 
     function _tryReadChronicle() internal returns (bool, uint) {
         bool ok;
@@ -229,14 +308,10 @@ contract Aggor is IAggor, Auth, Toll {
         }
 
         // Adjust decimals, if necessary.
-        uint val;
+        uint val = uint(answer);
         uint decimals_ = IChainlinkAggregatorV3(chainlink).decimals();
-        if (decimals_ == 18) {
-            val = uint(answer);
-        } else if (decimals_ < 18) {
-            val = uint(answer) * (10 ** (18 - decimals_));
-        } else {
-            val = uint(answer) / (10 ** (decimals_ - 18));
+        if (decimals_ != decimals) {
+            val = LibCalc.scale(val, decimals_, decimals);
         }
 
         // Fail if value is zero.
@@ -252,32 +327,6 @@ contract Aggor is IAggor, Auth, Toll {
     function _toInt(uint128 val) private pure returns (int) {
         // Note that int(type(uint128).max) == type(uint128).max.
         return int(uint(val));
-    }
-
-    function _unsafeMean(uint a, uint b) private pure returns (uint) {
-        uint mean;
-        unchecked {
-            // Note that >> 1 equals a division by 2.
-            mean = (a + b) >> 1;
-        }
-        return mean;
-    }
-
-    /// @dev Computes the percent difference of two numbers with a precision of
-    ///      _pscale (99.99%).
-    function _pctdiff(uint a, uint b) private pure returns (uint) {
-        if (a == b) return 0;
-        return a > b
-            ? _pscale - (((b * 1e18) / a) * _pscale / 1e18)
-            : _pscale - (((a * 1e18) / b) * _pscale / 1e18);
-    }
-
-    /// @dev Computes the numerical distance between two numbers. No overflow
-    ///      worries here.
-    function _distance(uint a, uint b) private pure returns (uint) {
-        unchecked {
-            return (a > b) ? a - b : b - a;
-        }
     }
 
     // -- Overridden Toll Functions --

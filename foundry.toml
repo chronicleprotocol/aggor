@@ -29,4 +29,8 @@ runs = 10_000
 [profile.intense.invariant]
 runs = 10_000
 
+# Note, 300 req/min anon
+[rpc_endpoints]
+mainnet = "https://rpc.ankr.com/eth"
+
 # See more config options https://github.com/foundry-rs/foundry/tree/master/config

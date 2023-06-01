@@ -6,6 +6,7 @@ import {Test} from "forge-std/Test.sol";
 import {IAuth} from "chronicle-std/auth/IAuth.sol";
 import {IToll} from "chronicle-std/toll/IToll.sol";
 
+import {LibCalc} from "src/libs/LibCalc.sol";
 import {IAggor} from "src/IAggor.sol";
 
 import {MockIChronicle} from "./mocks/MockIChronicle.sol";
@@ -18,13 +19,18 @@ abstract contract IAggorTest is Test {
     MockIChronicle chronicle;
     MockIChainlinkAggregatorV3 chainlink;
 
+    /// @dev Must match the value in Aggor.sol
+    uint16 internal constant _pscale = 10_000;
+
     // Copied from IAggor.
     event StalenessThresholdUpdated(
         address indexed caller,
-        uint oldStalenessThreshold,
-        uint newStalenessThreshold
+        uint32 oldStalenessThreshold,
+        uint32 newStalenessThreshold
     );
-    event SpreadUpdated(address indexed caller, uint oldSpread, uint newSpread);
+    event SpreadUpdated(
+        address indexed caller, uint16 oldSpread, uint16 newSpread
+    );
     event ChronicleValueStale(uint age, uint timestamp);
     event ChainlinkValueStale(uint age, uint timestamp);
     event ChainlinkValueNegative(int value);
@@ -38,22 +44,6 @@ abstract contract IAggorTest is Test {
 
         // Toll address(this).
         IToll(address(aggor)).kiss(address(this));
-    }
-
-    // Copied from Aggor.sol
-    uint internal constant _pscale = 10_000;
-
-    function _pctdiff(uint a, uint b) private pure returns (uint) {
-        if (a == b) return 0;
-        return a > b
-            ? _pscale - (((b * 1e18) / a) * _pscale / 1e18)
-            : _pscale - (((a * 1e18) / b) * _pscale / 1e18);
-    }
-
-    function _distance(uint a, uint b) private pure returns (uint) {
-        unchecked {
-            return (a > b) ? a - b : b - a;
-        }
     }
 
     function test_Deployment() public {
@@ -178,11 +168,10 @@ abstract contract IAggorTest is Test {
 
         (, uint curr) = aggor.tryRead();
         uint mean;
-        uint pof = _pctdiff(chainlinkVal, chronicleVal);
+        uint pof = LibCalc.pctDiff(chainlinkVal, chronicleVal, _pscale);
         if (pof > 0 && pof > aggor.spread()) {
-            mean = _distance(curr, chronicleVal) < _distance(curr, chainlinkVal)
-                ? chronicleVal
-                : chainlinkVal;
+            mean = LibCalc.distance(curr, chronicleVal)
+                < LibCalc.distance(curr, chainlinkVal) ? chronicleVal : chainlinkVal;
         } else {
             mean = (uint(chronicleVal) + uint(chainlinkVal)) / 2;
         }
@@ -299,7 +288,7 @@ abstract contract IAggorTest is Test {
     function test_poke_ChainlinkDecimalConversion() public {
         uint want;
         uint val;
-        aggor.setSpread(_pscale);
+        aggor.setSpread(uint16(_pscale));
 
         // Case 1: chainlink.decimals < 18.
         _setValAndAge(10e17, block.timestamp);
@@ -400,7 +389,7 @@ abstract contract IAggorTest is Test {
 
     // -- Auth'ed Functionality --
 
-    function testFuzz_setStalenessThreshold(uint stalenessThreshold) public {
+    function testFuzz_setStalenessThreshold(uint32 stalenessThreshold) public {
         vm.assume(stalenessThreshold != 0);
 
         if (aggor.stalenessThreshold() != stalenessThreshold) {
@@ -429,7 +418,7 @@ abstract contract IAggorTest is Test {
         aggor.setStalenessThreshold(1);
     }
 
-    function testFuzz_setSpread(uint spread) public {
+    function testFuzz_setSpread(uint16 spread) public {
         vm.assume(spread <= _pscale);
 
         if (aggor.spread() != spread) {
@@ -441,7 +430,7 @@ abstract contract IAggorTest is Test {
         assertEq(aggor.spread(), spread);
     }
 
-    function testFuzz_setSpread_FailsIf_SpreadBiggerThanPScale(uint spread)
+    function testFuzz_setSpread_FailsIf_SpreadBiggerThanPScale(uint16 spread)
         public
     {
         vm.assume(spread > _pscale);

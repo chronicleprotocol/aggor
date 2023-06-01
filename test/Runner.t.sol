@@ -4,6 +4,7 @@ pragma solidity ^0.8.16;
 import {Aggor} from "src/Aggor.sol";
 
 import {IAggorTest} from "./IAggorTest.sol";
+import {LibCalcTest as LibCalcTest_} from "./LibCalcTest.sol";
 
 import {MockIChronicle} from "./mocks/MockIChronicle.sol";
 import {MockIChainlinkAggregatorV3} from
@@ -19,3 +20,5 @@ contract AggorTest is IAggorTest {
         );
     }
 }
+
+contract LibCalcTest is LibCalcTest_ {}
