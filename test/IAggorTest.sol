@@ -12,17 +12,25 @@ import {IAggor} from "src/IAggor.sol";
 import {MockIChronicle} from "./mocks/MockIChronicle.sol";
 import {MockIChainlinkAggregatorV3} from
     "./mocks/MockIChainlinkAggregatorV3.sol";
+import {MockUniswapPool} from "./mocks/MockUniswapPool.sol";
+import {MockIERC20} from "./mocks/MockIERC20.sol";
 
 abstract contract IAggorTest is Test {
     IAggor aggor;
 
     MockIChronicle chronicle;
     MockIChainlinkAggregatorV3 chainlink;
+    MockUniswapPool uniPool;
+    MockIERC20 uniPoolToken0;
+    MockIERC20 uniPoolToken1;
 
     /// @dev Must match the value in Aggor.sol
     uint16 internal constant _pscale = 10_000;
 
     // Copied from IAggor.
+    event UniswapUpdated(
+        address indexed caller, address oldUniswapPool, address newUniswapPool
+    );
     event StalenessThresholdUpdated(
         address indexed caller,
         uint32 oldStalenessThreshold,
@@ -30,6 +38,11 @@ abstract contract IAggorTest is Test {
     );
     event SpreadUpdated(
         address indexed caller, uint16 oldSpread, uint16 newSpread
+    );
+    event UniswapSecondsAgoUpdated(
+        address indexed caller,
+        uint32 oldUniswapSecondsAgo,
+        uint32 newUniswapSecondsAgo
     );
     event ChronicleValueStale(uint age, uint timestamp);
     event ChainlinkValueStale(uint age, uint timestamp);
@@ -41,6 +54,13 @@ abstract contract IAggorTest is Test {
 
         chronicle = MockIChronicle(aggor.chronicle());
         chainlink = MockIChainlinkAggregatorV3(aggor.chainlink());
+
+        uniPoolToken0 =
+            new MockIERC20("Uniswap Pool Token 0", "UniToken0", uint8(18));
+        uniPoolToken1 =
+            new MockIERC20("Uniswap Pool Token 1", "UniToken1", uint8(18));
+        uniPool =
+            new MockUniswapPool(address(uniPoolToken0), address(uniPoolToken1));
 
         // Toll address(this).
         IToll(address(aggor)).kiss(address(this));
@@ -59,6 +79,9 @@ abstract contract IAggorTest is Test {
 
         // Spread set.
         assertTrue(aggor.spread() != 0);
+
+        // UniSecondsAgo set.
+        assertTrue(aggor.uniSecondsAgo() != 0);
 
         // IChainlinkAggregatorV3::decimals() set.
         assertEq(aggor.decimals(), uint8(18));
@@ -430,7 +453,7 @@ abstract contract IAggorTest is Test {
         assertEq(aggor.spread(), spread);
     }
 
-    function testFuzz_setSpread_FailsIf_SpreadBiggerThanPScale(uint16 spread)
+    function testFuzz_setSpread_FailsIf_BiggerThanPScale(uint16 spread)
         public
     {
         vm.assume(spread > _pscale);
@@ -447,6 +470,77 @@ abstract contract IAggorTest is Test {
             )
         );
         aggor.setSpread(1);
+    }
+
+    function testFuzz_setUniSecondsAgo(uint32 uniSecondsAgo) public {
+        vm.assume(uniSecondsAgo >= aggor.minUniSecondsAgo());
+
+        if (aggor.uniSecondsAgo() != uniSecondsAgo) {
+            vm.expectEmit();
+            emit UniswapSecondsAgoUpdated(
+                address(this), aggor.uniSecondsAgo(), uniSecondsAgo
+            );
+        }
+
+        aggor.setUniSecondsAgo(uniSecondsAgo);
+        assertEq(aggor.uniSecondsAgo(), uniSecondsAgo);
+    }
+
+    function testFuzz_setUniSecondsAgo_FailsIf_LessThanMinAllowedSeconds(
+        uint32 uniSecondsAgo
+    ) public {
+        vm.assume(uniSecondsAgo < aggor.minUniSecondsAgo());
+
+        vm.expectRevert();
+        aggor.setUniSecondsAgo(uniSecondsAgo);
+    }
+
+    function test_setUniSecondsAgo_IsAuthProtected() public {
+        vm.prank(address(0xbeef));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAuth.NotAuthorized.selector, address(0xbeef)
+            )
+        );
+        aggor.setUniSecondsAgo(1);
+    }
+
+    function test_setUniswap_FromZeroAddress() public {
+        vm.expectEmit();
+        emit UniswapUpdated(address(this), address(0), address(uniPool));
+
+        aggor.setUniswap(address(uniPool));
+
+        assertEq(aggor.uniPool(), address(uniPool));
+        assertEq(aggor.uniBasePair(), address(uniPoolToken0));
+        assertEq(aggor.uniQuotePair(), address(uniPoolToken1));
+        assertEq(aggor.uniBaseDec(), uint8(18));
+        assertEq(aggor.uniQuoteDec(), uint8(18));
+    }
+
+    function test_setUniswap_ToZeroAddress() public {
+        aggor.setUniswap(address(uniPool));
+
+        vm.expectEmit();
+        emit UniswapUpdated(address(this), address(uniPool), address(0));
+
+        aggor.setUniswap(address(0));
+
+        assertEq(aggor.uniPool(), address(0));
+        assertEq(aggor.uniBasePair(), address(0));
+        assertEq(aggor.uniQuotePair(), address(0));
+        assertEq(aggor.uniBaseDec(), uint8(0));
+        assertEq(aggor.uniQuoteDec(), uint8(0));
+    }
+
+    function test_setUniswap_IsAuthProtected() public {
+        vm.prank(address(0xbeef));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAuth.NotAuthorized.selector, address(0xbeef)
+            )
+        );
+        aggor.setUniswap(address(0));
     }
 
     // -- Private Helpers --

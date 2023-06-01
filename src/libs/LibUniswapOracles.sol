@@ -1,6 +1,8 @@
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.16;
 
-import "uniswap/v3-periphery/contracts/libraries/OracleLibrary.sol";
+import {OracleLibrary} from
+    "uniswap/v3-periphery/contracts/libraries/OracleLibrary.sol";
 
 /**
  * @title LibUniswapOracles

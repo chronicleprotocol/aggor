@@ -8,6 +8,14 @@ interface IAggor is IChronicle {
     /// @param oracle The oracle address which read's failed.
     error OracleReadFailed(address oracle);
 
+    /// @notice Emitted when Uniswap TWAP pool updated.
+    /// @param caller The caller's address.
+    /// @param oldUniswapPool The old Uniswap pool address.
+    /// @param newUniswapPool The new Uniswap pool address.
+    event UniswapUpdated(
+        address indexed caller, address oldUniswapPool, address newUniswapPool
+    );
+
     /// @notice Emitted when staleness threshold updated.
     /// @param caller The caller's address.
     /// @param oldStalenessThreshold The old staleness threshold.
@@ -24,6 +32,16 @@ interface IAggor is IChronicle {
     /// @param newSpread The new spread value.
     event SpreadUpdated(
         address indexed caller, uint16 oldSpread, uint16 newSpread
+    );
+
+    /// @notice Emitted when Uniswap TWAP's lookback period is updated.
+    /// @param caller The caller's address.
+    /// @param oldUniswapSecondsAgo The old uniswapSecondsAgo value.
+    /// @param newUniswapSecondsAgo The new uniswapSecondsAgo value.
+    event UniswapSecondsAgoUpdated(
+        address indexed caller,
+        uint32 oldUniswapSecondsAgo,
+        uint32 newUniswapSecondsAgo
     );
 
     /// @notice Emitted when Chronicle's oracle delivered a stale value.
@@ -72,8 +90,12 @@ interface IAggor is IChronicle {
     /// @notice The decimals of the quote pair ERC-20 token.
     function uniQuoteDec() external view returns (uint8);
 
-    /// @notice secondsAgo The time in seconds to "look back" per TWAP.
+    /// @notice The time in seconds to "look back" per TWAP.
     function uniSecondsAgo() external view returns (uint32);
+
+    /// @notice The minimum allowed lookback period for the Uniswap TWAP.
+    /// @dev The minimum allowed value for uniSecondsAgo.
+    function minUniSecondsAgo() external view returns (uint32);
 
     /// @notice Pokes aggor, i.e. updates aggor's value to the mean of
     ///         Chronicle's and Chainlink's current values.
@@ -151,6 +173,7 @@ interface IAggor is IChronicle {
     /// @notice Set the Uniswap TWAP lookback period. If never called, default
     //          is 5m.
     /// @dev Only callable by auth'ed address.
+    /// @dev Reverts if uniSecondsAgo less than minUniSecondsAgo.
     /// @param uniSecondsAgo Time in seconds used in the TWAP lookback.
     function setUniSecondsAgo(uint32 uniSecondsAgo) external;
 }
