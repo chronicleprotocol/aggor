@@ -130,7 +130,8 @@ contract Aggor is IAggor, Auth, Toll {
         // assert(valOther <= type(uint128).max);
 
         // Compute difference of oracle values.
-        uint diff = LibCalc.pctDiff(uint128(valChronicle), uint128(valOther), _pscale);
+        uint diff =
+            LibCalc.pctDiff(uint128(valChronicle), uint128(valOther), _pscale);
 
         if (diff != 0 && diff > spread) {
             // If difference is bigger than acceptable spread, let _val be the
