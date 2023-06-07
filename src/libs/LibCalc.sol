@@ -20,9 +20,9 @@ library LibCalc {
             : pscale - (((uint(a) * 1e18) / uint(b)) * pscale / 1e18);
     }
 
-    /// @dev Computes the numerical distance between two numbers. No overflow
-    ///      worries here.
+    /// @dev Computes the numerical distance between two numbers.
     function distance(uint a, uint b) internal pure returns (uint) {
+        // Unchecked as subtractions are guaranteed to not underflow.
         unchecked {
             return (a > b) ? a - b : b - a;
         }
@@ -36,8 +36,12 @@ library LibCalc {
         pure
         returns (uint)
     {
-        require(n > 0 && dec > 0 && destDec > 0);
+        // No need to scale if value is zero.
+        if (n == 0) return 0;
+
+        require(dec > 0 && destDec > 0);
         require(n > dec && n > destDec);
+
         return destDec > dec
             ? n * (10 ** (destDec - dec)) // Scale up
             : n / (10 ** (dec - destDec)); // Scale down

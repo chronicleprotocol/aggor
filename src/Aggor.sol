@@ -269,24 +269,21 @@ contract Aggor is IAggor, Auth, Toll {
     // -- Private Helpers --
 
     function _tryReadUniswap() internal returns (bool, uint) {
-        if (uniPool == address(0)) {
-            emit UniswapNotConfigured();
-            return (false, 0);
-        }
+        // assert(uniPool != address(0));
 
         uint val = LibUniswapOracles.readOracle(
             uniPool, uniBasePair, uniQuotePair, uniBaseDec, uniSecondsAgo
         );
 
+        // We always scale to 'decimals', up OR down.
+        if (uniQuoteDec != decimals) {
+            val = LibCalc.scale(val, uniQuoteDec, decimals);
+        }
+
         // Fail if value is zero.
         if (val == 0) {
             emit UniswapValueZero();
             return (false, 0);
-        }
-
-        // We always scale to 'decimals', up OR down.
-        if (uniQuoteDec != decimals) {
-            val = LibCalc.scale(val, uniQuoteDec, decimals);
         }
 
         return (true, val);
