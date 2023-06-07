@@ -135,6 +135,7 @@ contract Aggor is IAggor, Auth, Toll {
         if (diff != 0 && diff > spread) {
             // If difference is bigger than acceptable spread, let _val be the
             // oracle's value with less difference to the current _val.
+            // forgefmt: disable-next-item
             _val = LibCalc.distance(_val, valChronicle) < LibCalc.distance(_val, valOther)
                 ? uint128(valChronicle)
                 : uint128(valOther);
