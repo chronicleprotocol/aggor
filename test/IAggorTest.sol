@@ -189,16 +189,35 @@ abstract contract IAggorTest is Test {
         // Wait for some time.
         vm.warp(block.timestamp + warp);
 
-        (, uint curr) = aggor.tryRead();
-        uint mean;
-        uint pof = LibCalc.pctDiff(chainlinkVal, chronicleVal, _pscale);
-        if (pof > 0 && pof > aggor.spread()) {
-            mean = LibCalc.distance(curr, chronicleVal)
-                < LibCalc.distance(curr, chainlinkVal) ? chronicleVal : chainlinkVal;
+        // Read aggor's value.
+        bool ok;
+        uint cur;
+        (ok, cur) = aggor.tryRead();
+        assertTrue(ok);
+        assertNotEq(cur, 0);
+
+        // Compute expected value.
+        uint wantVal;
+
+        uint diff = LibCalc.pctDiff(chainlinkVal, chronicleVal, _pscale);
+        if (diff != 0 && diff > aggor.spread()) {
+            // If difference of values is bigger than acceptable spread, the
+            // expected value is the oracle's value with less difference to
+            // aggor's previous value.j
+            uint previousVal = 0;
+
+            wantVal = LibCalc.distance(previousVal, chronicleVal)
+                < LibCalc.distance(previousVal, chainlinkVal)
+                ? chronicleVal
+                : chainlinkVal;
         } else {
-            mean = (uint(chronicleVal) + uint(chainlinkVal)) / 2;
+            // If difference of values is less then acceptable spread, the
+            // expected value is the mean of the values.
+            // Note that the mean of two values is their average.
+            wantVal = (uint(chronicleVal) + uint(chainlinkVal)) / 2;
         }
-        _checkReadFunctions({wantVal: uint128(mean), wantAge: age});
+
+        _checkReadFunctions({wantVal: uint128(wantVal), wantAge: age});
     }
 
     function testFuzz_poke_FailsIf_ChronicleValueZero(uint128 val) public {

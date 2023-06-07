@@ -129,26 +129,25 @@ contract Aggor is IAggor, Auth, Toll {
         // assert(valOther != 0);
         // assert(valOther <= type(uint128).max);
 
-        // Check for suspicious deviation between oracles. Whichever price is
-        // nearest the previously agreed upon mean becomes _val.
-        uint checkSpread =
-            LibCalc.pctDiff(uint128(valChronicle), uint128(valOther), _pscale);
-        if (checkSpread > 0 && checkSpread > spread) {
-            _val = LibCalc.distance(_val, valChronicle)
-                < LibCalc.distance(_val, valOther)
+        // Compute difference of oracle values.
+        uint diff = LibCalc.pctDiff(uint128(valChronicle), uint128(valOther), _pscale);
+
+        if (diff != 0 && diff > spread) {
+            // If difference is bigger than acceptable spread, let _val be the
+            // oracle's value with less difference to the current _val.
+            _val = LibCalc.distance(_val, valChronicle) < LibCalc.distance(_val, valOther)
                 ? uint128(valChronicle)
                 : uint128(valOther);
-            _age = uint32(block.timestamp);
-            return;
+        } else {
+            // If difference is within acceptable spread, let _val be the mean
+            // of the oracles' values.
+            // Note that unsafe computation is fine because both arguments are
+            // less than or equal to type(uint128).max.
+            _val = uint128(LibCalc.unsafeMean(valChronicle, valOther));
         }
+        // assert(_val <= type(uint128).max);
 
-        // Compute mean.
-        // Unsafe ok because both arguments are <= type(uint128).max.
-        uint mean = LibCalc.unsafeMean(valOther, valChronicle);
-        // assert(mean <= type(uint128).max);
-
-        // Store mean as val and set its age to now.
-        _val = uint128(mean);
+        // Update _val's age to current timestamp.
         _age = uint32(block.timestamp);
     }
 
