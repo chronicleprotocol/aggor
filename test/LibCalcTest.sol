@@ -53,4 +53,11 @@ abstract contract LibCalcTest is Test {
         // Order doesn't matter, difference is the same
         assertEq(LibCalc.pctDiff(1.25 ether, 1 ether, 100_000), 20_000);
     }
+
+    function testFuzz_unsafeMean(uint128 a, uint128 b) public {
+        uint wantMean = (uint(a) + uint(b)) / 2;
+        uint gotMean = LibCalc.unsafeMean(a, b);
+
+        assertEq(wantMean, gotMean);
+    }
 }

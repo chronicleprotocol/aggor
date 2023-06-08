@@ -64,9 +64,6 @@ interface IAggor is IChronicle {
     /// @notice Emitted when Uniswap's oracle delivered a zero value.
     event UniswapValueZero();
 
-    /// @notice Emitted when Uniswap's oracle has not been setup.
-    event UniswapNotConfigured();
-
     /// @notice The Chronicle oracle to aggregate.
     /// @return The address of the Chronicle oracle being aggregated.
     function chronicle() external view returns (address);
@@ -94,7 +91,8 @@ interface IAggor is IChronicle {
     function uniSecondsAgo() external view returns (uint32);
 
     /// @notice The minimum allowed lookback period for the Uniswap TWAP.
-    /// @dev The minimum allowed value for uniSecondsAgo.
+    /// @dev Value is constant and save to cache.
+    /// @return The minimum allowed value for uniSecondsAgo.
     function minUniSecondsAgo() external view returns (uint32);
 
     /// @notice Pokes aggor, i.e. updates aggor's value to the mean of

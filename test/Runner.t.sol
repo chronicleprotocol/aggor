@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.16;
 
-import {Aggor} from "src/Aggor.sol";
-
-import {IAggorTest} from "./IAggorTest.sol";
-import {LibCalcTest as LibCalcTest_} from "./LibCalcTest.sol";
-
 import {MockIChronicle} from "./mocks/MockIChronicle.sol";
 import {MockIChainlinkAggregatorV3} from
     "./mocks/MockIChainlinkAggregatorV3.sol";
+
+// -- Aggor Tests --
+
+import {Aggor} from "src/Aggor.sol";
+
+import {IAggorTest} from "./IAggorTest.sol";
 
 contract AggorTest is IAggorTest {
     function setUp() public {
@@ -20,5 +21,9 @@ contract AggorTest is IAggorTest {
         );
     }
 }
+
+// -- Library Tests --
+
+import {LibCalcTest as LibCalcTest_} from "./LibCalcTest.sol";
 
 contract LibCalcTest is LibCalcTest_ {}

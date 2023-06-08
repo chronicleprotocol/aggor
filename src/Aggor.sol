@@ -129,26 +129,27 @@ contract Aggor is IAggor, Auth, Toll {
         // assert(valOther != 0);
         // assert(valOther <= type(uint128).max);
 
-        // Check for suspicious deviation between oracles. Whichever price is
-        // nearest the previously agreed upon mean becomes _val.
-        uint checkSpread =
+        // Compute difference of oracle values.
+        uint diff =
             LibCalc.pctDiff(uint128(valChronicle), uint128(valOther), _pscale);
-        if (checkSpread > 0 && checkSpread > spread) {
-            _val = LibCalc.distance(_val, valChronicle)
-                < LibCalc.distance(_val, valOther)
+
+        if (diff != 0 && diff > spread) {
+            // If difference is bigger than acceptable spread, let _val be the
+            // oracle's value with less difference to the current _val.
+            // forgefmt: disable-next-item
+            _val = LibCalc.distance(_val, valChronicle) < LibCalc.distance(_val, valOther)
                 ? uint128(valChronicle)
                 : uint128(valOther);
-            _age = uint32(block.timestamp);
-            return;
+        } else {
+            // If difference is within acceptable spread, let _val be the mean
+            // of the oracles' values.
+            // Note that unsafe computation is fine because both arguments are
+            // less than or equal to type(uint128).max.
+            _val = uint128(LibCalc.unsafeMean(valChronicle, valOther));
         }
+        // assert(_val <= type(uint128).max);
 
-        // Compute mean.
-        // Unsafe ok because both arguments are <= type(uint128).max.
-        uint mean = LibCalc.unsafeMean(valOther, valChronicle);
-        // assert(mean <= type(uint128).max);
-
-        // Store mean as val and set its age to now.
-        _val = uint128(mean);
+        // Update _val's age to current timestamp.
         _age = uint32(block.timestamp);
     }
 
@@ -269,24 +270,21 @@ contract Aggor is IAggor, Auth, Toll {
     // -- Private Helpers --
 
     function _tryReadUniswap() internal returns (bool, uint) {
-        if (uniPool == address(0)) {
-            emit UniswapNotConfigured();
-            return (false, 0);
-        }
+        // assert(uniPool != address(0));
 
         uint val = LibUniswapOracles.readOracle(
             uniPool, uniBasePair, uniQuotePair, uniBaseDec, uniSecondsAgo
         );
 
+        // We always scale to 'decimals', up OR down.
+        if (uniQuoteDec != decimals) {
+            val = LibCalc.scale(val, uniQuoteDec, decimals);
+        }
+
         // Fail if value is zero.
         if (val == 0) {
             emit UniswapValueZero();
             return (false, 0);
-        }
-
-        // We always scale to 'decimals', up OR down.
-        if (uniQuoteDec != decimals) {
-            val = LibCalc.scale(val, uniQuoteDec, decimals);
         }
 
         return (true, val);
