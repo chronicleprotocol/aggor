@@ -13,9 +13,37 @@ import {LibCalc} from "src/libs/LibCalc.sol";
 import {LibUniswapOracles} from "src/libs/LibUniswapOracles.sol";
 import {Aggor} from "src/Aggor.sol";
 
-import {MockIChronicle} from "./mocks/MockIChronicle.sol";
-import {MockIChainlinkAggregatorV3} from
-    "./mocks/MockIChainlinkAggregatorV3.sol";
+import {IChainlinkAggregatorV3} from
+    "src/interfaces/_external/IChainlinkAggregatorV3.sol";
+
+// @todo Delete and swap with Scribe contract, when one is avaiable onchain.
+//       https://app.shortcut.com/chronicle-labs/story/2660/aggor-integration-test-to-use-scribe-contract
+interface DeleteMeIMedianizer {
+    function wat() external view returns (bytes32 wat);
+    function read() external view returns (uint value);
+    function age() external view returns (uint32 age);
+}
+
+contract DeleteMeMedianizerWrapper {
+    address medianizer;
+
+    constructor(address medianizer_) {
+        medianizer = medianizer_;
+    }
+
+    function wat() external view returns (bytes32) {
+        return DeleteMeIMedianizer(medianizer).wat();
+    }
+
+    function tryReadWithAge()
+        external
+        view
+        returns (bool isValid, uint value, uint age)
+    {
+        uint val = DeleteMeIMedianizer(medianizer).read();
+        return (val > 0, val, uint(DeleteMeIMedianizer(medianizer).age()));
+    }
+}
 
 // Integration test queries the real Uniswap WETHUSDT pool and verifies mean.
 contract MainnetIntegrationTest is Test {
@@ -29,53 +57,107 @@ contract MainnetIntegrationTest is Test {
     /// @dev USDT ERC-20 contract
     address constant UNI_TOKEN_USDT = 0xdAC17F958D2ee523a2206206994597C13D831ec7;
 
-    /// @dev Decimals of base pair
+    /// @dev MedianETHUSD
+    ///      https://etherscan.io/address/0x64DE91F5A373Cd4c28de3600cB34C7C6cE410C85#code
+    address constant MEDIAN_ETHUSD = 0x64DE91F5A373Cd4c28de3600cB34C7C6cE410C85;
+    // Authed on the above:
+    address constant PAUSE_PROXY = 0xBE8E3e3618f7474F8cB1d074A26afFef007E98FB;
+
+    address constant CHAINLINK_ETHUSD =
+        0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419;
+
+    /// @dev Decimals of Uni base pair
     uint8 constant BASE_DEC = 18;
 
-    /// @dev Decimals of quote pair
+    /// @dev Decimals of Uni quote pair
     uint8 constant QUOTE_DEC = 6;
 
     Aggor aggor;
-    MockIChronicle chronicle;
+    DeleteMeMedianizerWrapper medianWrapper;
 
     function setUp() public {
         // Create mainnet fork.
         vm.createSelectFork("mainnet");
 
-        // Deploy and kiss
-        chronicle = new MockIChronicle();
-        aggor = new Aggor(
-            address(chronicle),
-            address(new MockIChainlinkAggregatorV3())
-        );
+        // Allow our test to read MedianETHUSD
+        medianWrapper = new DeleteMeMedianizerWrapper(MEDIAN_ETHUSD);
+        vm.prank(PAUSE_PROXY);
+        IToll(address(MEDIAN_ETHUSD)).kiss(address(medianWrapper));
+
+        aggor = new Aggor(address(medianWrapper), CHAINLINK_ETHUSD);
         IToll(address(aggor)).kiss(address(this));
-        aggor.setUniswap(UNI_POOL_WETHUSDT);
     }
 
+    // Full integration test, price values will not be deterministic
     function testIntegration_Mainnet() public {
-        uint curr = LibUniswapOracles.readOracle(
+        (, uint chronval,) = medianWrapper.tryReadWithAge();
+        assertTrue(chronval > 0);
+
+        uint unival = LibUniswapOracles.readOracle(
             UNI_POOL_WETHUSDT, UNI_TOKEN_WETH, UNI_TOKEN_USDT, BASE_DEC, 300
         );
-        assertTrue(curr > 0);
+        assertTrue(unival > 0);
 
-        curr = LibCalc.scale(curr, QUOTE_DEC, BASE_DEC);
-        uint cval = (curr / 10) * 9; // Reduce by 10%
-        console2.log("Uniswap WETHUSDT:   ", curr);
-        console2.log("Chronicle WETHUSDT: ", cval);
+        console2.log("Uni source   ", unival);
+        unival = LibCalc.scale(unival, QUOTE_DEC, BASE_DEC);
+        console2.log("Uni scaled   ", unival);
 
-        chronicle.setVal(cval);
-        chronicle.setAge(block.timestamp);
+        (, int chainvalSource,,,) =
+            IChainlinkAggregatorV3(CHAINLINK_ETHUSD).latestRoundData();
+        assertTrue(chainvalSource > 0);
+        console2.log("Chain source ", chainvalSource);
+        uint chainval = LibCalc.scale(
+            uint(chainvalSource),
+            uint(IChainlinkAggregatorV3(CHAINLINK_ETHUSD).decimals()),
+            BASE_DEC
+        );
+        console2.log("Chain scaled ", chainval);
+        console2.log("Chron source ", chronval);
 
-        // This spread will cause failure and selection of Chronicle value
-        aggor.setSpread(999);
+        uint spread =
+            LibCalc.pctDiff(uint128(chronval), uint128(chainval), 10_000);
+        uint spreadUni =
+            LibCalc.pctDiff(uint128(chronval), uint128(unival), 10_000);
+        console2.log("Spread       ", spread);
+        console2.log("Spread/uni   ", spreadUni);
+
+        // Test mean with Chainlink
+        aggor.setSpread(uint16(spread) + 1);
         aggor.poke();
-        console2.log("Nearest:            ", aggor.read());
-        assertEq(aggor.read(), cval);
+        console2.log("Aggor(chain) ", aggor.read());
+        uint mean = (chronval + chainval) / 2;
+        assertEq(aggor.read(), mean);
 
-        // Set spread to 10.00% so we get the mean
-        aggor.setSpread(1000);
+        // Test closest to previous value with Chainlink
+        aggor.setSpread(0);
         aggor.poke();
-        console2.log("Mean:               ", aggor.read());
-        assertEq(aggor.read(), (cval + curr) / 2);
+        console2.log("Aggor(chain) ", aggor.read());
+        assertEq(
+            aggor.read(),
+            LibCalc.distance(mean, chronval) < LibCalc.distance(mean, chainval)
+                ? chronval
+                : chainval
+        );
+
+        // Switch to Uniswap
+        aggor.setUniswap(UNI_POOL_WETHUSDT);
+
+        // Test mean with Uni
+        aggor.setSpread(uint16(spreadUni) + 1);
+        aggor.poke();
+        console2.log("Aggor(uni)   ", aggor.read());
+        mean = (chronval + unival) / 2;
+        assertEq(aggor.read(), mean);
+
+        // Test closest to previous value with Uni
+        aggor.setSpread(0);
+        aggor.poke();
+        console2.log("Aggor(uni)   ", aggor.read());
+        assertEq(
+            aggor.read(),
+            LibCalc.distance(mean, chronval) < LibCalc.distance(mean, unival)
+                ? chronval
+                : unival
+        );
     }
 }
