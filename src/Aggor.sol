@@ -71,6 +71,9 @@ contract Aggor is IAggor, Auth, Toll {
     /// @inheritdoc IAggor
     bool public uniswapSelected;
 
+    /// @inheritdoc IAggor
+    bool public paused;
+
     // This is the last agreed upon mean price.
     uint128 private _val;
     uint32 private _age;
@@ -117,6 +120,7 @@ contract Aggor is IAggor, Auth, Toll {
     }
 
     function _poke() internal {
+        if (paused) return;
         bool ok;
 
         // Read chronicle.
@@ -257,6 +261,11 @@ contract Aggor is IAggor, Auth, Toll {
     function useUniswap(bool selected) public auth {
         if (uniPool == address(0)) return;
         uniswapSelected = selected;
+    }
+
+    /// @inheritdoc IAggor
+    function pause(bool pause_) public auth {
+        paused = pause_;
     }
 
     // Setup the Uniswap pool. If zero address, we skip.
