@@ -8,13 +8,9 @@ interface IAggor is IChronicle {
     /// @param oracle The oracle address which read's failed.
     error OracleReadFailed(address oracle);
 
-    /// @notice Emitted when Uniswap TWAP pool updated.
-    /// @param caller The caller's address.
-    /// @param oldUniswapPool The old Uniswap pool address.
-    /// @param newUniswapPool The new Uniswap pool address.
-    event UniswapUpdated(
-        address indexed caller, address oldUniswapPool, address newUniswapPool
-    );
+    /// @notice Thrown if poke is called and Uniswap is selected but not
+    //          configured.
+    error UniswapNotConfigured();
 
     /// @notice Emitted when staleness threshold updated.
     /// @param caller The caller's address.
@@ -44,25 +40,8 @@ interface IAggor is IChronicle {
         uint32 newUniswapSecondsAgo
     );
 
-    /// @notice Emitted when Chronicle's oracle delivered a stale value.
-    /// @param age The age of Chronicle's oracle value.
-    /// @param timestamp The timestamp when the Chronicle oracle was read.
-    event ChronicleValueStale(uint age, uint timestamp);
-
-    /// @notice Emitted when Chainlink's oracle delivered a stale value.
-    /// @param age The age of Chainlink's oracle value.
-    /// @param timestamp The timestamp when the Chainlink oracle was read.
-    event ChainlinkValueStale(uint age, uint timestamp);
-
-    /// @notice Emitted when Chainlink's oracle delivered a negative value.
-    /// @param value The value the Chainlink oracle delivered.
-    event ChainlinkValueNegative(int value);
-
     /// @notice Emitted when Chainlink's oracle delivered a zero value.
     event ChainlinkValueZero();
-
-    /// @notice Emitted when Uniswap's oracle delivered a zero value.
-    event UniswapValueZero();
 
     /// @notice The Chronicle oracle to aggregate.
     /// @return The address of the Chronicle oracle being aggregated.
@@ -89,6 +68,10 @@ interface IAggor is IChronicle {
 
     /// @notice The time in seconds to "look back" per TWAP.
     function uniSecondsAgo() external view returns (uint32);
+
+    /// @notice Determines which secondary oracle is selected. If false
+    //          (default), use Chainlink.
+    function uniswapSelected() external view returns (bool);
 
     /// @notice The minimum allowed lookback period for the Uniswap TWAP.
     /// @dev Value is constant and save to cache.
@@ -164,9 +147,9 @@ interface IAggor is IChronicle {
     /// @notice Switch from default oracle (Chainlink) to alt (Uniswap),
     ///         and back.
     /// @dev Only callable by auth'ed address.
-    /// @param uniPool Provide the address to the Uniswap pool. If set to
-    //         address(0) Uniswap will not be used.
-    function setUniswap(address uniPool) external;
+    /// @param select If true will swap to Uniswap. If false will select
+    ///        Chainlink (default).
+    function useUniswap(bool select) external;
 
     /// @notice Set the Uniswap TWAP lookback period. If never called, default
     //          is 5m.

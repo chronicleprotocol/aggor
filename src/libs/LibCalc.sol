@@ -40,7 +40,6 @@ library LibCalc {
         if (n == 0) return 0;
 
         require(dec > 0 && destDec > 0);
-        require(n > dec && n > destDec);
 
         return destDec > dec
             ? n * (10 ** (destDec - dec)) // Scale up

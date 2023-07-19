@@ -68,11 +68,26 @@ contract Aggor is IAggor, Auth, Toll {
     /// @inheritdoc IAggor
     uint16 public spread;
 
+    /// @inheritdoc IAggor
+    bool public uniswapSelected;
+
     // This is the last agreed upon mean price.
     uint128 private _val;
     uint32 private _age;
 
-    constructor(address chronicle_, address chainlink_) {
+    /// @notice You only get once chance per deploy to setup Uniswap. If it
+    ///         will not be used, just pass in address(0) for uniPool_.
+    /// @param chronicle_ Address of Chronicle oracle
+    /// @param chainlink_ Address of Chainlink oracle
+    /// @param uniPool_ Address of Uniswap oracle (optional)
+    /// @param uniUseToken0AsBase If true, selects Pool.token0 as base pair, if not,
+    //         it uses Pool.token1 as the base pair.
+    constructor(
+        address chronicle_,
+        address chainlink_,
+        address uniPool_,
+        bool uniUseToken0AsBase
+    ) {
         require(chronicle_ != address(0));
         require(chainlink_ != address(0));
 
@@ -81,6 +96,8 @@ contract Aggor is IAggor, Auth, Toll {
 
         // Note that IChronicle::wat() is constant and save to cache.
         wat = IChronicle(chronicle_).wat();
+
+        _setUniswap(uniPool_, uniUseToken0AsBase);
 
         setStalenessThreshold(1 days);
         setSpread(500); // 5%
@@ -111,15 +128,19 @@ contract Aggor is IAggor, Auth, Toll {
         // assert(valChronicle != 0);
         // assert(valChronicle <= type(uint128).max);
 
-        // Read second oracle, i.e. either Chainlink or Uniswap TWAP.
+        // Read second oracle, either Chainlink or Uniswap TWAP.
         uint valOther;
-        if (uniPool == address(0)) {
+        if (!uniswapSelected) {
             // Read Chainlink.
             (ok, valOther) = _tryReadChainlink();
             if (!ok) {
                 revert OracleReadFailed(chainlink);
             }
         } else {
+            if (uniPool == address(0)) {
+                revert UniswapNotConfigured();
+            }
+
             // Read Uniswap.
             (ok, valOther) = _tryReadUniswap();
             if (!ok) {
@@ -133,7 +154,7 @@ contract Aggor is IAggor, Auth, Toll {
         uint diff =
             LibCalc.pctDiff(uint128(valChronicle), uint128(valOther), _pscale);
 
-        if (diff != 0 && diff > spread) {
+        if (diff > spread) {
             // If difference is bigger than acceptable spread, let _val be the
             // oracle's value with less difference to the current _val.
             // forgefmt: disable-next-item
@@ -233,26 +254,27 @@ contract Aggor is IAggor, Auth, Toll {
     }
 
     /// @inheritdoc IAggor
-    function setUniswap(address uniPool_) public auth {
-        if (uniPool == uniPool_) return;
+    function useUniswap(bool selected) public auth {
+        if (uniPool == address(0)) return;
+        uniswapSelected = selected;
+    }
 
-        // Update Uniswap pool variable.
-        emit UniswapUpdated(msg.sender, uniPool, uniPool_);
+    // Setup the Uniswap pool. If zero address, we skip.
+    function _setUniswap(address uniPool_, bool uniUseToken0AsBase) internal {
+        if (uniPool_ == address(0)) return;
+
         uniPool = uniPool_;
 
-        if (uniPool_ != address(0)) {
-            // Set other Uniswap variables.
+        if (uniUseToken0AsBase) {
             uniBasePair = IUniswapV3PoolImmutables(uniPool).token0();
             uniQuotePair = IUniswapV3PoolImmutables(uniPool).token1();
-            uniBaseDec = IERC20(uniBasePair).decimals();
-            uniQuoteDec = IERC20(uniQuotePair).decimals();
         } else {
-            // Delete other Uniswap variables.
-            delete uniBasePair;
-            delete uniQuotePair;
-            delete uniBaseDec;
-            delete uniQuoteDec;
+            uniBasePair = IUniswapV3PoolImmutables(uniPool).token1();
+            uniQuotePair = IUniswapV3PoolImmutables(uniPool).token0();
         }
+
+        uniBaseDec = IERC20(uniBasePair).decimals();
+        uniQuoteDec = IERC20(uniQuotePair).decimals();
     }
 
     /// @inheritdoc IAggor
@@ -269,7 +291,7 @@ contract Aggor is IAggor, Auth, Toll {
 
     // -- Private Helpers --
 
-    function _tryReadUniswap() internal returns (bool, uint) {
+    function _tryReadUniswap() internal view returns (bool, uint) {
         // assert(uniPool != address(0));
 
         uint val = LibUniswapOracles.readOracle(
@@ -283,14 +305,18 @@ contract Aggor is IAggor, Auth, Toll {
 
         // Fail if value is zero.
         if (val == 0) {
-            emit UniswapValueZero();
+            return (false, 0);
+        }
+
+        // Also fail if could cause overflow.
+        if (val > type(uint128).max) {
             return (false, 0);
         }
 
         return (true, val);
     }
 
-    function _tryReadChronicle() internal returns (bool, uint) {
+    function _tryReadChronicle() internal view returns (bool, uint) {
         bool ok;
         uint val;
         uint age;
@@ -300,14 +326,13 @@ contract Aggor is IAggor, Auth, Toll {
         // Fail if value stale.
         uint diff = block.timestamp - age;
         if (diff > stalenessThreshold) {
-            emit ChronicleValueStale(age, block.timestamp);
             return (false, 0);
         }
 
         return (ok, val);
     }
 
-    function _tryReadChainlink() internal returns (bool, uint) {
+    function _tryReadChainlink() internal view returns (bool, uint) {
         int answer;
         uint updatedAt;
         (, answer,, updatedAt,) =
@@ -316,13 +341,11 @@ contract Aggor is IAggor, Auth, Toll {
         // Fail if value stale.
         uint diff = block.timestamp - updatedAt;
         if (diff > stalenessThreshold) {
-            emit ChainlinkValueStale(updatedAt, block.timestamp);
             return (false, 0);
         }
 
         // Fail if value negative.
         if (answer < 0) {
-            emit ChainlinkValueNegative(answer);
             return (false, 0);
         }
 
@@ -335,7 +358,6 @@ contract Aggor is IAggor, Auth, Toll {
 
         // Fail if value is zero.
         if (val == 0) {
-            emit ChainlinkValueZero();
             return (false, 0);
         }
 

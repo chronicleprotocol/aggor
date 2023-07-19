@@ -12,7 +12,6 @@ import {IAggor} from "src/IAggor.sol";
 import {MockIChronicle} from "./mocks/MockIChronicle.sol";
 import {MockIChainlinkAggregatorV3} from
     "./mocks/MockIChainlinkAggregatorV3.sol";
-import {MockUniswapPool} from "./mocks/MockUniswapPool.sol";
 import {MockIERC20} from "./mocks/MockIERC20.sol";
 
 abstract contract IAggorTest is Test {
@@ -20,9 +19,6 @@ abstract contract IAggorTest is Test {
 
     MockIChronicle chronicle;
     MockIChainlinkAggregatorV3 chainlink;
-    MockUniswapPool uniPool;
-    MockIERC20 uniPoolToken0;
-    MockIERC20 uniPoolToken1;
 
     /// @dev Must match the value in Aggor.sol
     uint16 internal constant _pscale = 10_000;
@@ -44,23 +40,12 @@ abstract contract IAggorTest is Test {
         uint32 oldUniswapSecondsAgo,
         uint32 newUniswapSecondsAgo
     );
-    event ChronicleValueStale(uint age, uint timestamp);
-    event ChainlinkValueStale(uint age, uint timestamp);
-    event ChainlinkValueNegative(int value);
-    event ChainlinkValueZero();
 
     function setUp(IAggor aggor_) internal {
         aggor = aggor_;
 
         chronicle = MockIChronicle(aggor.chronicle());
         chainlink = MockIChainlinkAggregatorV3(aggor.chainlink());
-
-        uniPoolToken0 =
-            new MockIERC20("Uniswap Pool Token 0", "UniToken0", uint8(18));
-        uniPoolToken1 =
-            new MockIERC20("Uniswap Pool Token 1", "UniToken1", uint8(18));
-        uniPool =
-            new MockUniswapPool(address(uniPoolToken0), address(uniPoolToken1));
 
         // Toll address(this).
         IToll(address(aggor)).kiss(address(this));
@@ -250,9 +235,6 @@ abstract contract IAggorTest is Test {
         );
         chronicle.setAge(chronicleAge);
 
-        vm.expectEmit();
-        emit ChronicleValueStale(chronicleAge, block.timestamp);
-
         vm.expectRevert(
             abi.encodeWithSelector(
                 IAggor.OracleReadFailed.selector, address(chronicle)
@@ -267,9 +249,6 @@ abstract contract IAggorTest is Test {
 
         // Let chainlink's val be zero.
         chainlink.setAnswer(0);
-
-        vm.expectEmit();
-        emit ChainlinkValueZero();
 
         vm.expectRevert(
             abi.encodeWithSelector(
@@ -294,9 +273,6 @@ abstract contract IAggorTest is Test {
         );
         chainlink.setUpdatedAt(chainlinkAge);
 
-        vm.expectEmit();
-        emit ChainlinkValueStale(chainlinkAge, block.timestamp);
-
         vm.expectRevert(
             abi.encodeWithSelector(
                 IAggor.OracleReadFailed.selector, address(chainlink)
@@ -315,9 +291,6 @@ abstract contract IAggorTest is Test {
         // Let chainlink's val be negative.
         int chainlinkVal = bound(chainlinkValSeed, type(int).min, -1);
         chainlink.setAnswer(chainlinkVal);
-
-        vm.expectEmit();
-        emit ChainlinkValueNegative(chainlinkVal);
 
         vm.expectRevert(
             abi.encodeWithSelector(
@@ -491,6 +464,16 @@ abstract contract IAggorTest is Test {
         aggor.setSpread(1);
     }
 
+    function test_useUniswap_IsAuthProtected() public {
+        vm.prank(address(0xbeef));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAuth.NotAuthorized.selector, address(0xbeef)
+            )
+        );
+        aggor.useUniswap(true);
+    }
+
     function testFuzz_setUniSecondsAgo(uint32 uniSecondsAgo) public {
         vm.assume(uniSecondsAgo >= aggor.minUniSecondsAgo());
 
@@ -522,44 +505,6 @@ abstract contract IAggorTest is Test {
             )
         );
         aggor.setUniSecondsAgo(1);
-    }
-
-    function test_setUniswap_FromZeroAddress() public {
-        vm.expectEmit();
-        emit UniswapUpdated(address(this), address(0), address(uniPool));
-
-        aggor.setUniswap(address(uniPool));
-
-        assertEq(aggor.uniPool(), address(uniPool));
-        assertEq(aggor.uniBasePair(), address(uniPoolToken0));
-        assertEq(aggor.uniQuotePair(), address(uniPoolToken1));
-        assertEq(aggor.uniBaseDec(), uint8(18));
-        assertEq(aggor.uniQuoteDec(), uint8(18));
-    }
-
-    function test_setUniswap_ToZeroAddress() public {
-        aggor.setUniswap(address(uniPool));
-
-        vm.expectEmit();
-        emit UniswapUpdated(address(this), address(uniPool), address(0));
-
-        aggor.setUniswap(address(0));
-
-        assertEq(aggor.uniPool(), address(0));
-        assertEq(aggor.uniBasePair(), address(0));
-        assertEq(aggor.uniQuotePair(), address(0));
-        assertEq(aggor.uniBaseDec(), uint8(0));
-        assertEq(aggor.uniQuoteDec(), uint8(0));
-    }
-
-    function test_setUniswap_IsAuthProtected() public {
-        vm.prank(address(0xbeef));
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                IAuth.NotAuthorized.selector, address(0xbeef)
-            )
-        );
-        aggor.setUniswap(address(0));
     }
 
     // -- Private Helpers --

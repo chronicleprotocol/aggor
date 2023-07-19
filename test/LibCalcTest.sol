@@ -11,6 +11,12 @@ abstract contract LibCalcTest is Test {
         assertEq(scaled, 14_645_946);
         scaled = LibCalc.scale(14_645_946, 6, 18);
         assertEq(scaled, 14_645_946_000_000_000_000);
+
+        assertEq(1 ether, LibCalc.scale(1 ether, 999, 999));
+        assertEq(
+            10_000_000_000_000_000_000_000_000_000_000_000_000_000,
+            LibCalc.scale(1, 10, 50)
+        );
     }
 
     function test_scale_revert() public {
@@ -24,20 +30,12 @@ abstract contract LibCalcTest is Test {
         vm.expectRevert();
         LibCalc.scale(1, 1, 0);
 
-        // Value can't be less than or equal to either decimal
-        vm.expectRevert();
-        LibCalc.scale(999, 999, 1000);
-
-        vm.expectRevert();
-        LibCalc.scale(999, 1000, 900);
-
-        // Makes no sense to call when decimals are the same
-        vm.expectRevert();
-        LibCalc.scale(1 ether, 999, 999);
-
         // Overflow/underflow
         vm.expectRevert();
         LibCalc.scale(12_345, 99, 1);
+
+        vm.expectRevert();
+        LibCalc.scale(100, 1000, 10_000);
     }
 
     function test_distance() public {
