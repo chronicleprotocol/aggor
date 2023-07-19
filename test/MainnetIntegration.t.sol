@@ -84,7 +84,8 @@ contract MainnetIntegrationTest is Test {
         vm.prank(PAUSE_PROXY);
         IToll(address(MEDIAN_ETHUSD)).kiss(address(medianWrapper));
 
-        aggor = new Aggor(address(medianWrapper), CHAINLINK_ETHUSD);
+        aggor = new Aggor(
+            address(medianWrapper), CHAINLINK_ETHUSD, UNI_POOL_WETHUSDT, true);
         IToll(address(aggor)).kiss(address(this));
     }
 
@@ -140,7 +141,7 @@ contract MainnetIntegrationTest is Test {
         );
 
         // Switch to Uniswap
-        aggor.setUniswap(UNI_POOL_WETHUSDT);
+        aggor.useUniswap(true);
 
         // Test mean with Uni
         aggor.setSpread(uint16(spreadUni) + 1);
@@ -159,5 +160,23 @@ contract MainnetIntegrationTest is Test {
                 ? chronval
                 : unival
         );
+
+        // Switch back to Chainlink and verify state has changed.
+        aggor.useUniswap(false);
+        assertTrue(!aggor.uniswapSelected());
+    }
+
+    // Ensure that Aggor will revert if dev is requesting a lookback period
+    // that is too far.
+    function testIntegration_UniswapLookback() public {
+        aggor.useUniswap(true);
+        assertTrue(aggor.uniswapSelected());
+
+        aggor.poke();
+
+        vm.expectRevert();
+        aggor.setUniSecondsAgo(type(uint32).max);
+
+        aggor.poke();
     }
 }

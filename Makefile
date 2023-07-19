@@ -10,7 +10,7 @@ gas_report: ## Print gas report
 
 .PHONY: snapshot
 snapshot: ## Update forge's snapshot file
-	forge snapshot --nmt "Fuzz"
+	forge snapshot --nmt "Fuzz|Integration"
 
 .PHONY: help
 help: ## Help command
