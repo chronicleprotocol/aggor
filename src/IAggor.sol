@@ -26,6 +26,12 @@ interface IAggor is IChronicle {
         address indexed caller, bool oldValue, bool newValue
     );
 
+    /// @notice Emitted when poke is paused or unpaused.
+    /// @param caller The caller's address.
+    /// @param oldValue The previous value.
+    /// @param newValue The updated value.
+    event PauseCalled(address indexed caller, bool oldValue, bool newValue);
+
     /// @notice Emitted when spread is updated.
     /// @param caller The caller's address.
     /// @param oldSpread The old spread value.
@@ -81,6 +87,9 @@ interface IAggor is IChronicle {
     /// @dev Value is constant and save to cache.
     /// @return The minimum allowed value for uniSecondsAgo.
     function minUniSecondsAgo() external view returns (uint32);
+
+    /// @notice If true, poke cannot be called.
+    function paused() external view returns (bool);
 
     /// @notice Pokes aggor, i.e. updates aggor's value to the mean of
     ///         Chronicle's and Chainlink's current values.
@@ -156,9 +165,14 @@ interface IAggor is IChronicle {
     function useUniswap(bool select) external;
 
     /// @notice Set the Uniswap TWAP lookback period. If never called, default
-    //          is 5m.
+    ///         is 5m.
     /// @dev Only callable by auth'ed address.
     /// @dev Reverts if uniSecondsAgo less than minUniSecondsAgo.
     /// @param uniSecondsAgo Time in seconds used in the TWAP lookback.
     function setUniSecondsAgo(uint32 uniSecondsAgo) external;
+
+    /// @notice Pause or unpause pokes.
+    /// @dev Only callable by auth'ed address.
+    /// @param pause Passing true will pause Aggor, false will unpause.
+    function pause(bool pause) external;
 }

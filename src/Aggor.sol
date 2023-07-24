@@ -71,6 +71,9 @@ contract Aggor is IAggor, Auth, Toll {
     /// @inheritdoc IAggor
     bool public uniswapSelected;
 
+    /// @inheritdoc IAggor
+    bool public paused;
+
     // This is the last agreed upon mean price.
     uint128 private _val;
     uint32 private _age;
@@ -151,6 +154,7 @@ contract Aggor is IAggor, Auth, Toll {
     }
 
     function _poke() internal {
+        if (paused) return;
         bool ok;
 
         // Read chronicle.
@@ -318,6 +322,19 @@ contract Aggor is IAggor, Auth, Toll {
         // Ensure that the pool works within the desired "lookback" period.
         (bool ok,) = _tryReadUniswap();
         require(ok);
+    }
+
+    /// @inheritdoc IAggor
+    function pause(bool pause_) external auth {
+        require(pause_ != paused);
+
+        emit PauseCalled({
+            caller: msg.sender,
+            oldValue: paused,
+            newValue: pause_
+        });
+
+        paused = pause_;
     }
 
     // -- Private Helpers --
