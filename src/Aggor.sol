@@ -68,6 +68,9 @@ contract Aggor is IAggor, Auth, Toll {
     /// @inheritdoc IAggor
     uint16 public spread;
 
+    /// @inheritdoc IAggor
+    bool public paused;
+
     // This is the last agreed upon mean price.
     uint128 private _val;
     uint32 private _age;
@@ -100,6 +103,7 @@ contract Aggor is IAggor, Auth, Toll {
     }
 
     function _poke() internal {
+        if (paused) return;
         bool ok;
 
         // Read chronicle.

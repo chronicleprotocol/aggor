@@ -353,6 +353,21 @@ abstract contract IAggorTest is Test {
         assertEq(val, want);
     }
 
+    function test_pause() public {
+        _setValAndAge(1000, block.timestamp);
+        assertEq(aggor.read(), 1000);
+
+        aggor.pause(true);
+        _setValAndAge(9000, block.timestamp);
+        assertTrue(aggor.paused());
+        assertEq(aggor.read(), 1000); // Price unchanged after poke
+
+        aggor.pause(false);
+        _setValAndAge(9000, block.timestamp);
+        assertTrue(!aggor.paused());
+        assertEq(aggor.read(), 9000);
+    }
+
     // -- Read Functionality --
 
     // -- IChronicle
@@ -560,6 +575,16 @@ abstract contract IAggorTest is Test {
             )
         );
         aggor.setUniswap(address(0));
+    }
+
+    function test_Pause_IsAuthProtected() public {
+        vm.prank(address(0xbeef));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAuth.NotAuthorized.selector, address(0xbeef)
+            )
+        );
+        aggor.pause(true);
     }
 
     // -- Private Helpers --

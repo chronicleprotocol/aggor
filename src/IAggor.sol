@@ -95,6 +95,9 @@ interface IAggor is IChronicle {
     /// @return The minimum allowed value for uniSecondsAgo.
     function minUniSecondsAgo() external view returns (uint32);
 
+    /// @notice If true, poke cannot be called.
+    function paused() external view returns (bool);
+
     /// @notice Pokes aggor, i.e. updates aggor's value to the mean of
     ///         Chronicle's and Chainlink's current values.
     /// @dev Reverts if an oracle's value cannot be read.
@@ -169,9 +172,14 @@ interface IAggor is IChronicle {
     function setUniswap(address uniPool) external;
 
     /// @notice Set the Uniswap TWAP lookback period. If never called, default
-    //          is 5m.
+    ///         is 5m.
     /// @dev Only callable by auth'ed address.
     /// @dev Reverts if uniSecondsAgo less than minUniSecondsAgo.
     /// @param uniSecondsAgo Time in seconds used in the TWAP lookback.
     function setUniSecondsAgo(uint32 uniSecondsAgo) external;
+
+    /// @notice Pause or unpause pokes.
+    /// @dev Only callable by auth'ed address.
+    /// @param pause Passing true will pause Aggor, false will unpause.
+    function pause(bool pause) external;
 }
