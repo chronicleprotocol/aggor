@@ -36,7 +36,7 @@ $ forge fmt [--check]
 
 Update gas snapshots:
 ```bash
-$ forge snapshot --nmt "Fuzz" [--check]
+$ forge snapshot --nmt "Fuzz|Integration" [--check]
 ```
 
 ## Dependencies

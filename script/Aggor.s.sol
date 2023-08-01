@@ -75,7 +75,9 @@ contract AggorScript is Script {
     }
 
     /// @dev Sets staleness threshold to `stalenessThreshold`.
-    function setStalenessThreshold(address self, uint32 stalenessThreshold) public {
+    function setStalenessThreshold(address self, uint32 stalenessThreshold)
+        public
+    {
         vm.startBroadcast();
         IAggor(self).setStalenessThreshold(stalenessThreshold);
         vm.stopBroadcast();
