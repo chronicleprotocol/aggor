@@ -20,7 +20,6 @@ import {IChainlinkAggregatorV3} from
 
 /**
  * @title Aggor
- * @custom:version 0.1.0
  *
  * @notice Aggor combines oracle values from multiple providers into a single
  *         value
@@ -77,17 +76,19 @@ contract Aggor is IAggor, Auth, Toll {
 
     /// @notice You only get once chance per deploy to setup Uniswap. If it
     ///         will not be used, just pass in address(0) for uniPool_.
+    /// @param initialAuthed Address to be initially auth'ed
     /// @param chronicle_ Address of Chronicle oracle
     /// @param chainlink_ Address of Chainlink oracle
     /// @param uniPool_ Address of Uniswap oracle (optional)
     /// @param uniUseToken0AsBase If true, selects Pool.token0 as base pair, if not,
     //         it uses Pool.token1 as the base pair.
     constructor(
+        address initialAuthed,
         address chronicle_,
         address chainlink_,
         address uniPool_,
         bool uniUseToken0AsBase
-    ) {
+    ) Auth(initialAuthed) {
         require(chronicle_ != address(0));
         require(chainlink_ != address(0));
 
@@ -130,11 +131,11 @@ contract Aggor is IAggor, Auth, Toll {
         uniQuoteDec = uniQuoteDecInitializer;
 
         // Default config values
-        setStalenessThreshold(1 days);
-        setSpread(500); // 5%
+        _setStalenessThreshold(1 days);
+        _setSpread(500); // 5%
 
         if (uniPool != address(0)) {
-            setUniSecondsAgo(5 minutes);
+            _setUniSecondsAgo(5 minutes);
         }
     }
 
@@ -264,7 +265,11 @@ contract Aggor is IAggor, Auth, Toll {
     // -- Auth'ed Functionality --
 
     /// @inheritdoc IAggor
-    function setStalenessThreshold(uint32 stalenessThreshold_) public auth {
+    function setStalenessThreshold(uint32 stalenessThreshold_) external auth {
+        _setStalenessThreshold(stalenessThreshold_);
+    }
+
+    function _setStalenessThreshold(uint32 stalenessThreshold_) internal {
         require(stalenessThreshold_ != 0);
 
         if (stalenessThreshold != stalenessThreshold_) {
@@ -276,7 +281,11 @@ contract Aggor is IAggor, Auth, Toll {
     }
 
     /// @inheritdoc IAggor
-    function setSpread(uint16 spread_) public auth {
+    function setSpread(uint16 spread_) external auth {
+        _setSpread(spread_);
+    }
+
+    function _setSpread(uint16 spread_) internal {
         require(spread_ <= _pscale);
 
         if (spread != spread_) {
@@ -303,7 +312,11 @@ contract Aggor is IAggor, Auth, Toll {
     }
 
     /// @inheritdoc IAggor
-    function setUniSecondsAgo(uint32 uniSecondsAgo_) public auth {
+    function setUniSecondsAgo(uint32 uniSecondsAgo_) external auth {
+        _setUniSecondsAgo(uniSecondsAgo_);
+    }
+
+    function _setUniSecondsAgo(uint32 uniSecondsAgo_) internal {
         // Uniswap is optional, make sure it's configured
         require(uniPool != address(0));
         require(uniSecondsAgo_ >= minUniSecondsAgo);

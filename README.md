@@ -41,6 +41,7 @@ $ forge snapshot --nmt "Fuzz" [--check]
 
 ## Dependencies
 
-- [chronicleprotocol/chronicle-std@v1](https://github.com/chronicleprotocol/chronicle-std/tree/v1)
+- [chronicleprotocol/chronicle-std@v2](https://github.com/chronicleprotocol/chronicle-std/tree/v2)
+- [chronicleprotocol/greenhouse@v1](https://github.com/chronicleprotocol/greenhouse/tree/v1)
 - [uniswap/v3-periphery@0.8](https://github.com/Uniswap/v3-periphery/tree/0.8)
 - [uniswap/v3-core@0.8](https://github.com/Uniswap/v3-core/tree/0.8)

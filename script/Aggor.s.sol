@@ -38,6 +38,7 @@ contract AggorScript is Script {
     function deploy() public returns (IAggor) {
         vm.startBroadcast();
         aggor = new Aggor(
+            address(this),
             ORACLE_CHRONICLE,
             ORACLE_CHAINLINK,
             ORACLE_UNISWAP,

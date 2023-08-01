@@ -28,6 +28,7 @@ contract AggorTest is IAggorTest {
 
         setUp(
             new Aggor(
+                address(this),
                 address(new MockIChronicle()),
                 address(new MockIChainlinkAggregatorV3()),
                 address(uniPool),
