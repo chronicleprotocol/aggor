@@ -31,7 +31,8 @@ contract AggorTest is IAggorTest {
                 address(new MockIChronicle()),
                 address(new MockIChainlinkAggregatorV3()),
                 address(uniPool),
-                true
+                true,
+                address(this)
             )
         );
     }

@@ -86,8 +86,9 @@ contract Aggor is IAggor, Auth, Toll {
         address chronicle_,
         address chainlink_,
         address uniPool_,
-        bool uniUseToken0AsBase
-    ) {
+        bool uniUseToken0AsBase,
+        address initialAuthed
+    ) Auth(initialAuthed) {
         require(chronicle_ != address(0));
         require(chainlink_ != address(0));
 
