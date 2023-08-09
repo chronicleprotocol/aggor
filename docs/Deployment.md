@@ -40,7 +40,7 @@ $ SALT_BYTES32=$(cast --format-bytes32-string $SALT) && \
     --rpc-url $RPC_URL \
     --etherscan-api-key $ETHERSCAN_API_KEY \
     --verify \
-    --sig $(cast calldata "deploy(address,bytes32,address,address,address,address,bool) $GREENHOUSE $SALT_BYTES32 $INITIAL_AUTHED $CHRONICLE $CHAINLINK $UNI_POOL $UNI_USE_TOKEN_0_AS_BASE) \
+    --sig $(cast calldata "deploy(address,bytes32,address,address,address,address,bool)" $GREENHOUSE $SALT_BYTES32 $INITIAL_AUTHED $CHRONICLE $CHAINLINK $UNI_POOL $UNI_USE_TOKEN_0_AS_BASE) \
     -vvv \
     script/Aggor.s.sol:AggorScript
 ```
