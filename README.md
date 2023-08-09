@@ -44,6 +44,8 @@ Update gas snapshots:
 $ forge snapshot --nmt "Fuzz|Integration" [--check]
 ```
 
+To deploy see [Deployment docs](docs/Deployment.md).
+
 ## Dependencies
 
 - [chronicleprotocol/chronicle-std@v2](https://github.com/chronicleprotocol/chronicle-std/tree/v2)
