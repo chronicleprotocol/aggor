@@ -12,7 +12,7 @@ import {IGreenhouse} from "greenhouse/IGreenhouse.sol";
 import {IAggor} from "src/IAggor.sol";
 import {Aggor} from "src/Aggor.sol";
 
-contract Aggor_X is Aggor {
+contract Aggor_COUNTER is Aggor {
     // @todo   ^ Adjust name of Aggor instance.
     constructor(
         address initialAuthed,
@@ -45,7 +45,7 @@ contract AggorScript is Script {
     ) public {
         // Create creation code with constructor arguments.
         bytes memory creationCode = abi.encodePacked(
-            type(Aggor_X).creationCode,
+            type(Aggor_COUNTER).creationCode,
             // @todo   ^ Adjust name of Aggor instance.
             abi.encode(
                 initialAuthed, chronicle, chainlink, uniPool, uniUseToken0AsBase
