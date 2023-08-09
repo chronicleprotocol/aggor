@@ -510,7 +510,12 @@ abstract contract IAggorTest is Test {
 
     function test_useUniswap_NotConfigured() public {
         IAggor aggor_ = new Aggor(
-            aggor.chronicle(), aggor.chainlink(), address(0), false);
+            address(this),
+            aggor.chronicle(),
+            aggor.chainlink(),
+            address(0),
+            false
+        );
         vm.expectRevert();
         aggor_.useUniswap(true);
     }

@@ -5,6 +5,10 @@
 [submodule "lib/chronicle-std"]
 	path = lib/chronicle-std
 	url = https://github.com/chronicleprotocol/chronicle-std
+	branch = v2
+[submodule "lib/greenhouse"]
+	path = lib/greenhouse
+	url = https://github.com/chronicleprotocol/greenhouse
 	branch = v1
 [submodule "lib/uniswap/v3-periphery"]
 	path = lib/uniswap/v3-periphery

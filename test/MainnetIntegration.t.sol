@@ -85,7 +85,12 @@ contract MainnetIntegrationTest is Test {
         IToll(address(MEDIAN_ETHUSD)).kiss(address(medianWrapper));
 
         aggor = new Aggor(
-            address(medianWrapper), CHAINLINK_ETHUSD, UNI_POOL_WETHUSDT, true);
+            address(this),
+            address(medianWrapper),
+            CHAINLINK_ETHUSD,
+            UNI_POOL_WETHUSDT,
+            true
+        );
         IToll(address(aggor)).kiss(address(this));
     }
 
