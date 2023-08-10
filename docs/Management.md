@@ -26,7 +26,7 @@ The following environment variables must be set for all commands:
 - `PRIVATE_KEY`: The private key to use
 - `AGGOR`: The `Aggor` instance to manage
 
-Note that an `.env.example` file is provided in the project root. To set all environment variables at once, create a copy of the file and rename the copy to `.env`, adjust the variable's values', and run `source .env`.
+Note that an `.env.example` file is provided in the project root. To set all environment variables at once, create a copy of the file and rename the copy to `.env`, adjust the variables' values, and run `source .env`.
 
 ## Functions
 
@@ -139,7 +139,7 @@ $ forge script \
 
 Set the following environment variables:
 
-- `WHO`: The address renounce auth from
+- `WHO`: The address to renounce auth from
 
 Run:
 
@@ -157,7 +157,7 @@ $ forge script \
 
 Set the following environment variables:
 
-- `WHO`: The address grant toll to
+- `WHO`: The address to grant toll to
 
 Run:
 
@@ -175,7 +175,7 @@ $ forge script \
 
 Set the following environment variables:
 
-- `WHO`: The address renounce toll from
+- `WHO`: The address to renounce toll from
 
 Run:
 

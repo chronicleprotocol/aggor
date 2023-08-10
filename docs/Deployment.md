@@ -22,6 +22,8 @@ The following environment variables must be set:
 - `UNI_USE_TOKEN_0_AS_BASE`: Whether Uniswap's token0 is the base asset
     - Note that value must either `true` or `false`
 
+Note that an `.env.example` file is provided in the project root. To set all environment variables at once, create a copy of the file and rename the copy to `.env`, adjust the variables' values, and run `source .env`.
+
 ## Code Adjustments
 
 Adjust the name of the `Aggor` instance to deploy inside `script/Aggor.s.sol`.
