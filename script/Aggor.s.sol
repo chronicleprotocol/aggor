@@ -10,20 +10,8 @@ import {IToll} from "chronicle-std/toll/IToll.sol";
 import {IGreenhouse} from "greenhouse/IGreenhouse.sol";
 
 import {IAggor} from "src/IAggor.sol";
-import {Aggor} from "src/Aggor.sol";
-
-contract Aggor_COUNTER is Aggor {
-    // @todo   ^ Adjust name of Aggor instance.
-    constructor(
-        address initialAuthed,
-        address chronicle_,
-        address chainlink_,
-        address uniPool_,
-        bool uniUseToken0AsBase
-    )
-        Aggor(initialAuthed, chronicle_, chainlink_, uniPool_, uniUseToken0AsBase)
-    {}
-}
+import {Aggor_COUNTER as Aggor} from "src/Aggor.sol";
+// @todo      ^^^^^^^ Adjust name of Aggor instance.
 
 /**
  * @notice Aggor Management Script
@@ -45,8 +33,7 @@ contract AggorScript is Script {
     ) public {
         // Create creation code with constructor arguments.
         bytes memory creationCode = abi.encodePacked(
-            type(Aggor_COUNTER).creationCode,
-            // @todo   ^ Adjust name of Aggor instance.
+            type(Aggor).creationCode,
             abi.encode(
                 initialAuthed, chronicle, chainlink, uniPool, uniUseToken0AsBase
             )
