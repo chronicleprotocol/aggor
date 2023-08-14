@@ -419,3 +419,21 @@ contract Aggor is IAggor, Auth, Toll {
     /// @dev Defines authorization for IToll's authenticated functions.
     function toll_auth() internal override(Toll) auth {}
 }
+
+/**
+ * @dev Contract overwrite to deploy contract instances with specific naming.
+ *
+ *      For more info, see docs/Deployment.md.
+ */
+contract Aggor_COUNTER is Aggor {
+    // @todo   ^^^^^^^ Adjust name of Aggor instance
+    constructor(
+        address initialAuthed,
+        address chronicle_,
+        address chainlink_,
+        address uniPool_,
+        bool uniUseToken0AsBase
+    )
+        Aggor(initialAuthed, chronicle_, chainlink_, uniPool_, uniUseToken0AsBase)
+    {}
+}

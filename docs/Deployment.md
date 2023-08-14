@@ -8,67 +8,67 @@ The following environment variables must be set:
 
 - `RPC_URL`: The RPC URL of an EVM node
 - `PRIVATE_KEY`: The private key to use
+- `ETHERSCAN_API_URL`: The Etherscan API URL for the Etherscan's chain instance
+    - Note that the API endpoint varies per Etherscan chain instance
+    - Note to point to actual API endpoint (e.g. `/api`) and not just host
 - `ETHERSCAN_API_KEY`: The Etherscan API key for the Etherscan's chain instance
 - `GREENHOUSE`: The `Greenhouse` instance to use for deployment
 - `SALT`: The salt to deploy the `Aggor` instance to
     - Note to use the salt's string representation
     - Note that the salt must not exceed 32 bytes in length
+    - Note that the salt should match the name of the contract deployed!
 - `INITIAL_AUTHED`: The address being auth'ed on the newly deployed `Aggor` instance
 - `O_CHRON`: The address of the Chronicle Oracle
 - `O_CHAIN`: The address of the Chainlink Oracle
-- `O_UNI`: [Optional] The address of the Uniswap pool. If not going to use, set to the zero address `0x0000000000000000000000000000000000000000`
-- `UNI_BASETOKEN`: If you are using the Uniswap pools `token0` as the base token (generally the case), set to `1`. If `token1`, set to `0`.
+- `O_UNI`: [Optional] The address of the Uniswap pool.
+    - Note to use zero address (`0x0000000000000000000000000000000000000000`) if Uniswap pool not necessary
+- `UNI_BASETOKEN`: If you are using the Uniswap pools `token0` as the base token, set to `1`. If `token1`, set to `0`.
+
+Note that an `.env.example` file is provided in the project root. To set all environment variables at once, create a copy of the file and rename the copy to `.env`, adjust the variables' values, and run `source .env`.
+
+To easily check the environment variables, run:
+
+```bash
+$ env | grep -e "RPC_URL" -e "PRIVATE_KEY" -e "ETHERSCAN_API_URL" -e "ETHERSCAN_API_KEY" -e "GREENHOUSE" -e "SALT" -e "INITIAL_AUTHED" -e "O_CHRON" -e "O_CHAIN" -e "O_UNI" -e "UNI_BASETOKEN"
+```
 
 ## Code Adjustments
 
-You need to make some source code edits before running the deploy. Note that these edits should NOT be checked in, they are only temporary and can be discarded. The record of the deploy must be added to the `chronicles` repo.
+Two code adjustments are necessary to give each deployed contract instance a unique name:
 
-### Script file
-
-Adjust the name of the `Aggor` instance to deploy inside `script/Aggor.s.sol`.
-
-1. Adjust the name of the `Aggor_COUNTER` contract
-2. Adjust the name of the contract inside the `deploy` function
-3. Remove both `@todo` comments
-
-### Contract source 
-
-Adjust the name of the `Aggor` contract to match the name replacing `Aggor_COUNTER` in `script/Aggor.s.sol`.
-
-This is exclusively for the verification step below.
+1. Adjust the `Aggor_COUNTER`'s name in `src/Aggor.sol` and remove the `@todo` comment
+2. Adjust the import of the `Aggor_COUNTER` in `script/Aggor.s.sol` and remove the `@todo` comment
 
 ## Execution
 
-You need to run the deploy and the verification separately. First do the deploy:
+The deployment process consists of two steps - the actual deployment and the subsequent Etherscan verification.
+
+Deployment:
 
 ```bash
-SALT_BYTES32=$(cast --format-bytes32-string $SALT) && \
-forge script \
-	--private-key "$PRIVATE_KEY" \
-	--broadcast \
-	--rpc-url "$RPC_URL" \
+$ SALT_BYTES32=$(cast format-bytes32-string $SALT) && \
+  forge script \
+    --private-key "$PRIVATE_KEY" \
+    --broadcast \
+    --rpc-url "$RPC_URL" \
     --sig "$(cast calldata "deploy(address,bytes32,address,address,address,address,bool)" \
-        "$GREENHOUSE" "$SALT_BYTES32" "$AUTHED_DEPLOYER" "$O_CHRON" "$O_CHAIN" "$O_UNI" "$UNI_BASETOKEN")" \
-   script/Aggor.s.sol:AggorScript
-
+        "$GREENHOUSE" "$SALT_BYTES32" "$INITIAL_AUTHED" "$O_CHRON" "$O_CHAIN" "$O_UNI" "$UNI_BASETOKEN")" \
+    -vvv \
+    script/Aggor.s.sol:AggorScript
 ```
 
-If the deploy was successful, the next step is to verify. You should now have a `$DEPLOY_ADDRESS` which you can provide to the following command.
+The deployment command will log the address of the newly deployed contract address. Store this address in the `$AGGOR` environment variable and continue with the verification.
+
+Verification:
 
 ```bash
-forge verify-contract \
-    "$DEPLOY_ADDRESS" \
+$ forge verify-contract \
+    "$AGGOR" \
     --verifier-url "$ETHERSCAN_API_URL" \
-    --etherscan-api-key "$ETHERSCAN_KEY" \
-    src/Aggor.sol:"$SALT" \
+    --etherscan-api-key "$ETHERSCAN_API_KEY" \
+    --watch \
     --constructor-args \
         "$(cast abi-encode "constructor(address,address,address,address,bool)" \
-            "$AUTHED_DEPLOYER" "$O_CHRON" "$O_CHAIN" "$O_UNI" "$unibase_token")" \
-    --watch
+            "$INITIAL_AUTHED" "$O_CHRON" "$O_CHAIN" "$O_UNI" "$UNI_BASETOKEN")" \
+    src/Aggor.sol:"$SALT"
 ```
-
-Note that `$ETHERSCAN_API_URL` above needs to point to the correct Etherscan API for the given chain and environent. E.g. for Optimism, you would pick one of these:
-
-[https://docs.optimism.etherscan.io/v/optimistic-goerli-etherscan](https://docs.optimism.etherscan.io/v/optimistic-goerli-etherscan)
-
-
