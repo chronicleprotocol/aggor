@@ -15,9 +15,6 @@ import {LibUniswapOracles} from "./libs/LibUniswapOracles.sol";
 
 import {IAggor} from "./IAggor.sol";
 
-import {IChainlinkAggregatorV3} from
-    "./interfaces/_external/IChainlinkAggregatorV3.sol";
-
 /**
  * @title Aggor
  *
@@ -29,208 +26,182 @@ contract Aggor is IAggor, Auth, Toll {
     uint16 internal constant _pscale = 10_000;
 
     /// @inheritdoc IAggor
-    uint32 public constant minUniSecondsAgo = 5 minutes;
+    uint8 public constant decimals = 18;
 
     /// @inheritdoc IAggor
-    uint8 public constant decimals = 18;
+    uint public agreementDistance;
+
+    /// @inheritdoc IAggor
+    bool public isPeggedAsset;
+
+    /// @notice The set of Oracle from which we will query price.
+    address[] private _oracles;
+
+    /// @inheritdoc IAggor
+    address public twap;
+
+    /// @inheritdoc IAggor
+    uint public acceptableAgeThreshold;
 
     /// @inheritdoc IChronicle
     bytes32 public immutable wat;
 
-    /// @inheritdoc IAggor
-    address public immutable chronicle;
+    /// @dev We track both age and price together, this struct pairs them which
+    //       can then be sorted, picked for median, etc.
+    struct PriceData {
+        uint val;
+        uint age;
+    }
 
-    /// @inheritdoc IAggor
-    address public immutable chainlink;
-
-    /// @inheritdoc IAggor
-    address public immutable uniPool;
-
-    /// @inheritdoc IAggor
-    address public immutable uniBasePair;
-
-    /// @inheritdoc IAggor
-    address public immutable uniQuotePair;
-
-    /// @inheritdoc IAggor
-    uint8 public immutable uniBaseDec;
-
-    /// @inheritdoc IAggor
-    uint8 public immutable uniQuoteDec;
-
-    /// @inheritdoc IAggor
-    uint32 public uniSecondsAgo;
-
-    /// @inheritdoc IAggor
-    uint32 public stalenessThreshold;
-
-    /// @inheritdoc IAggor
-    uint16 public spread;
-
-    /// @inheritdoc IAggor
-    bool public uniswapSelected;
-
-    // This is the last agreed upon mean price.
-    uint128 private _val;
-    uint32 private _age;
-
-    /// @notice You only get once chance per deploy to setup Uniswap. If it
-    ///         will not be used, just pass in address(0) for uniPool_.
-    /// @param initialAuthed Address to be initially auth'ed
-    /// @param chronicle_ Address of Chronicle oracle
-    /// @param chainlink_ Address of Chainlink oracle
-    /// @param uniPool_ Address of Uniswap oracle (optional)
-    /// @param uniUseToken0AsBase If true, selects Pool.token0 as base pair, if not,
-    //         it uses Pool.token1 as the base pair.
     constructor(
         address initialAuthed,
-        address chronicle_,
-        address chainlink_,
-        address uniPool_,
-        bool uniUseToken0AsBase
+        bytes32 wat_,
+        address[] memory oracles_,
+        address twap_,
+        uint acceptableAgeThreshold_,
+        bool isPeggedAsset_
     ) Auth(initialAuthed) {
-        require(chronicle_ != address(0));
-        require(chainlink_ != address(0));
+        _setOracles(oracles_);
 
-        chronicle = chronicle_;
-        chainlink = chainlink_;
-
-        // Note that IChronicle::wat() is constant and save to cache.
-        wat = IChronicle(chronicle_).wat();
-
-        // Optionally initialize Uniswap.
-        address uniPoolInitializer;
-        address uniBasePairInitializer;
-        address uniQuotePairInitializer;
-        uint8 uniBaseDecInitializer;
-        uint8 uniQuoteDecInitializer;
-
-        if (uniPool_ != address(0)) {
-            uniPoolInitializer = uniPool_;
-
-            if (uniUseToken0AsBase) {
-                uniBasePairInitializer =
-                    IUniswapV3PoolImmutables(uniPoolInitializer).token0();
-                uniQuotePairInitializer =
-                    IUniswapV3PoolImmutables(uniPoolInitializer).token1();
-            } else {
-                uniBasePairInitializer =
-                    IUniswapV3PoolImmutables(uniPoolInitializer).token1();
-                uniQuotePairInitializer =
-                    IUniswapV3PoolImmutables(uniPoolInitializer).token0();
-            }
-
-            uniBaseDecInitializer = IERC20(uniBasePairInitializer).decimals();
-            uniQuoteDecInitializer = IERC20(uniQuotePairInitializer).decimals();
-        }
-
-        uniPool = uniPoolInitializer;
-        uniBasePair = uniBasePairInitializer;
-        uniQuotePair = uniQuotePairInitializer;
-        uniBaseDec = uniBaseDecInitializer;
-        uniQuoteDec = uniQuoteDecInitializer;
-
-        // Default config values
-        _setStalenessThreshold(1 days);
-        _setSpread(500); // 5%
-
-        if (uniPool != address(0)) {
-            _setUniSecondsAgo(5 minutes);
-        }
-    }
-
-    /// @inheritdoc IAggor
-    function poke() external {
-        _poke();
-    }
-
-    /// @dev Optimized function selector: 0x00000000.
-    ///      Note that this function is _not_ defined via the IAggor interface
-    ///      and one should _not_ depend on it.
-    function poke_optimized_3923566589() external {
-        _poke();
-    }
-
-    function _poke() internal {
-        bool ok;
-
-        // Read chronicle.
-        uint valChronicle;
-        (ok, valChronicle) = _tryReadChronicle();
-        if (!ok) {
-            revert OracleReadFailed(chronicle);
-        }
-        // assert(valChronicle != 0);
-        // assert(valChronicle <= type(uint128).max);
-
-        // Read second oracle, either Chainlink or Uniswap TWAP.
-        uint valOther;
-        if (!uniswapSelected) {
-            // Read Chainlink.
-            (ok, valOther) = _tryReadChainlink();
-            if (!ok) {
-                revert OracleReadFailed(chainlink);
-            }
-        } else {
-            // assert(uniPool != address(0));
-
-            // Read Uniswap.
-            (ok, valOther) = _tryReadUniswap();
-            if (!ok) {
-                revert OracleReadFailed(uniPool);
-            }
-        }
-        // assert(valOther != 0);
-        // assert(valOther <= type(uint128).max);
-
-        // Compute difference of oracle values.
-        uint diff =
-            LibCalc.pctDiff(uint128(valChronicle), uint128(valOther), _pscale);
-
-        if (diff > spread) {
-            // If difference is bigger than acceptable spread, let _val be the
-            // oracle's value with less difference to the current _val.
-            // forgefmt: disable-next-item
-            _val = LibCalc.distance(_val, valChronicle) < LibCalc.distance(_val, valOther)
-                ? uint128(valChronicle)
-                : uint128(valOther);
-        } else {
-            // If difference is within acceptable spread, let _val be the mean
-            // of the oracles' values.
-            // Note that unsafe computation is fine because both arguments are
-            // less than or equal to type(uint128).max.
-            _val = uint128(LibCalc.unsafeMean(valChronicle, valOther));
-        }
-        // assert(_val <= type(uint128).max);
-
-        // Update _val's age to current timestamp.
-        _age = uint32(block.timestamp);
+        wat = wat_;
+        twap = twap_;
+        isPeggedAsset = isPeggedAsset_;
+        acceptableAgeThreshold = acceptableAgeThreshold_;
     }
 
     // -- Read Functionality --
+
+    function _read() internal view returns (uint, uint, StatusInfo memory) {
+        // Instrospect and track status of this workflow
+        StatusInfo memory status;
+
+        /// @dev In-memory arrays don't have push() so instantiate with enough slots
+        /// for all prices. Then we will _shorten() to get "pushed" prices. You
+        /// MUST increment goodPricesTotal whenever goodPrices is assigned a price.
+        PriceData[] memory goodPrices = new PriceData[](_oracles.length + 1);
+        uint goodPricesTotal;
+
+        bool ok;
+        uint val;
+        uint age;
+
+        for (uint i = 0; i < _oracles.length; i++) {
+            (ok, val, age) = IChronicle(_oracles[i]).tryReadWithAge();
+            if (
+                ok && val != 0 && age <= block.timestamp
+                    && (block.timestamp - age) <= acceptableAgeThreshold
+            ) {
+                goodPrices[goodPricesTotal++] = PriceData(val, age);
+            } else {
+                status.countFailedOraclePrices++;
+            }
+        }
+
+        status.countGoodOraclePrices = goodPricesTotal;
+
+        // Preferred scenario, will fall through to less desirable ones below.
+        if (goodPricesTotal >= 3) {
+            PriceData memory price =
+                _median(_shorten(goodPrices, goodPricesTotal));
+            status.returnLevel = 1;
+            return (price.val, price.age, status);
+        }
+
+        if (goodPricesTotal == 2) {
+            // Try to return mean of Oracles:
+            // Prices from the Oracles MUST be within the agreement distance (%)
+            if (
+                LibCalc.pctDiff(
+                    uint128(goodPrices[0].val),
+                    uint128(goodPrices[1].val),
+                    _pscale
+                ) <= agreementDistance
+            ) {
+                status.returnLevel = 2;
+                return (
+                    (goodPrices[0].val + goodPrices[1].val) / 2,
+                    goodPrices[0].age,
+                    status
+                );
+            } else {
+                // Otherwise, use alternate methods to obtain median:
+                status.returnLevel = 3;
+                if (isPeggedAsset) {
+                    // NOTE(jamesr) Aggor treats all price values as having 18
+                    // decimals, at least until necessary to scale down, e.g.
+                    // the return from latestAnswer(). So the notion of
+                    // "inserting 1 into the price set for median" really means
+                    // inserting 1 ether.
+                    goodPrices[goodPricesTotal++] =
+                        PriceData(1 ether, block.timestamp);
+                    PriceData memory price =
+                        _median(_shorten(goodPrices, goodPricesTotal));
+                    return (price.val, price.age, status);
+                }
+                if (twap != address(0)) {
+                    (ok, val, age) = IChronicle(twap).tryReadWithAge();
+                    if (ok) {
+                        goodPrices[goodPricesTotal++] = PriceData(val, age);
+                        status.twapUsed = true;
+                        PriceData memory price =
+                            _median(_shorten(goodPrices, goodPricesTotal));
+                        return (price.val, price.age, status);
+                    }
+                }
+            }
+        }
+
+        // If only one oracle with good data, return that
+        if (goodPricesTotal == 1) {
+            status.returnLevel = 4;
+            return (goodPrices[0].val, goodPrices[0].age, status);
+        }
+
+        // Last attempt to get price, return TWAP if possible.
+        if (twap != address(0)) {
+            (ok, val, age) = IChronicle(twap).tryReadWithAge();
+            if (
+                ok && age <= block.timestamp // Can't be from the future
+                    && (block.timestamp - age) <= acceptableAgeThreshold
+            ) {
+                status.twapUsed = true;
+                status.returnLevel = 5;
+                return (val, age, status);
+            }
+        }
+
+        // Finally, no price could be obtained. The defi world has ended,
+        // probably in fire.
+        status.returnLevel = 6;
+        return (0, 0, status);
+    }
 
     // -- IChronicle
 
     /// @inheritdoc IChronicle
     function read() external view toll returns (uint) {
-        require(_val != 0);
-        return _val;
+        (uint val,,) = _read();
+        require(val != 0);
+        return val;
     }
 
     /// @inheritdoc IChronicle
     function tryRead() external view toll returns (bool, uint) {
-        return (_val != 0, _val);
+        (uint val,,) = _read();
+        return (val != 0, val);
     }
 
     /// @inheritdoc IChronicle
     function readWithAge() external view toll returns (uint, uint) {
-        require(_val != 0);
-        return (_val, _age);
+        (uint val, uint age,) = _read();
+        require(val != 0);
+        return (val, age);
     }
 
     /// @inheritdoc IChronicle
     function tryReadWithAge() external view toll returns (bool, uint, uint) {
-        return (_val != 0, _val, _age);
+        (uint val, uint age,) = _read();
+        return (val != 0, val, age);
     }
 
     // -- IChainlinkAggregatorV3
@@ -250,168 +221,151 @@ contract Aggor is IAggor, Auth, Toll {
         )
     {
         roundId = 1;
-        answer = _toInt(_val);
-        // assert(uint(answer) == uint(_val));
+        (uint val, uint age,) = _read();
+        answer = _toInt(uint128(val));
         startedAt = 0;
-        updatedAt = _age;
+        updatedAt = age;
         answeredInRound = roundId;
     }
 
     /// @inheritdoc IAggor
     function latestAnswer() external view toll returns (int) {
-        return _toInt(_val);
+        (uint val,,) = _read();
+        return _toInt(uint128(LibCalc.scale(val, decimals, 8)));
+    }
+
+    // -- IAggor
+
+    /// @inheritdoc IAggor
+    function readWithStatus()
+        external
+        view
+        toll
+        returns (uint, uint, StatusInfo memory)
+    {
+        return _read();
     }
 
     // -- Auth'ed Functionality --
 
     /// @inheritdoc IAggor
-    function setStalenessThreshold(uint32 stalenessThreshold_) external auth {
-        _setStalenessThreshold(stalenessThreshold_);
+    function setAgreementDistance(uint agreementDistance_) external auth {
+        _setAgreementDistance(agreementDistance_);
     }
 
-    function _setStalenessThreshold(uint32 stalenessThreshold_) internal {
-        require(stalenessThreshold_ != 0);
+    function _setAgreementDistance(uint agreementDistance_) internal {
+        require(agreementDistance_ != 0);
 
-        if (stalenessThreshold != stalenessThreshold_) {
-            emit StalenessThresholdUpdated(
-                msg.sender, stalenessThreshold, stalenessThreshold_
+        if (agreementDistance != agreementDistance_) {
+            emit AgreementDistanceUpdated(
+                msg.sender, agreementDistance, agreementDistance_
             );
-            stalenessThreshold = stalenessThreshold_;
+            agreementDistance = agreementDistance_;
         }
     }
 
-    /// @inheritdoc IAggor
-    function setSpread(uint16 spread_) external auth {
-        _setSpread(spread_);
+    function setAcceptableAgeThreshold(uint acceptableAgeThreshold_)
+        external
+        auth
+    {
+        _setAcceptableAgeThreshold(acceptableAgeThreshold_);
     }
 
-    function _setSpread(uint16 spread_) internal {
-        require(spread_ <= _pscale);
+    function _setAcceptableAgeThreshold(uint acceptableAgeThreshold_)
+        internal
+        auth
+    {
+        require(acceptableAgeThreshold_ != 0);
 
-        if (spread != spread_) {
-            emit SpreadUpdated(msg.sender, spread, spread_);
-            spread = spread_;
-        }
-    }
-
-    /// @inheritdoc IAggor
-    function useUniswap(bool selected) external auth {
-        // Uniswap pool must be configured
-        require(uniPool != address(0));
-
-        // Revert unless there is something to change
-        require(uniswapSelected != selected);
-
-        emit UniswapSelectedUpdated({
-            caller: msg.sender,
-            oldValue: uniswapSelected,
-            newValue: selected
-        });
-
-        uniswapSelected = selected;
-    }
-
-    /// @inheritdoc IAggor
-    function setUniSecondsAgo(uint32 uniSecondsAgo_) external auth {
-        _setUniSecondsAgo(uniSecondsAgo_);
-    }
-
-    function _setUniSecondsAgo(uint32 uniSecondsAgo_) internal {
-        // Uniswap is optional, make sure it's configured
-        require(uniPool != address(0));
-        require(uniSecondsAgo_ >= minUniSecondsAgo);
-
-        if (uniSecondsAgo != uniSecondsAgo_) {
-            emit UniswapSecondsAgoUpdated(
-                msg.sender, uniSecondsAgo, uniSecondsAgo_
+        if (acceptableAgeThreshold != acceptableAgeThreshold_) {
+            emit AcceptableAgeThresholdUpdated(
+                msg.sender, acceptableAgeThreshold, acceptableAgeThreshold_
             );
-            uniSecondsAgo = uniSecondsAgo_;
+            acceptableAgeThreshold = acceptableAgeThreshold_;
         }
+    }
 
-        // Ensure that the pool works within the desired "lookback" period.
-        (bool ok,) = _tryReadUniswap();
-        require(ok);
+    /// @inheritdoc IAggor
+    function setOracles(address[] memory oracles_) external auth {
+        _setOracles(oracles_);
+    }
+
+    function _setOracles(address[] memory oracles_) internal {
+        _oracles = new address[](oracles_.length);
+        for (uint i = 0; i < oracles_.length; i++) {
+            require(oracles_[i] != address(0));
+            _oracles[i] = oracles_[i];
+        }
+    }
+
+    /// @inheritdoc IAggor
+    function setTwap(address twap_) external auth {
+        twap = twap_;
+    }
+
+    /// @inheritdoc IAggor
+    function oracles() external view returns (address[] memory) {
+        return _oracles;
     }
 
     // -- Private Helpers --
-
-    function _tryReadUniswap() internal view returns (bool, uint) {
-        // assert(uniPool != address(0));
-
-        uint val = LibUniswapOracles.readOracle(
-            uniPool, uniBasePair, uniQuotePair, uniBaseDec, uniSecondsAgo
-        );
-
-        // We always scale to 'decimals', up OR down.
-        if (uniQuoteDec != decimals) {
-            val = LibCalc.scale(val, uniQuoteDec, decimals);
-        }
-
-        // Fail if value is zero.
-        if (val == 0) {
-            return (false, 0);
-        }
-
-        // Also fail if could cause overflow.
-        if (val > type(uint128).max) {
-            return (false, 0);
-        }
-
-        return (true, val);
-    }
-
-    function _tryReadChronicle() internal view returns (bool, uint) {
-        bool ok;
-        uint val;
-        uint age;
-        (ok, val, age) = IChronicle(chronicle).tryReadWithAge();
-        // assert(!ok || val != 0);
-
-        // Fail if value stale.
-        uint diff = block.timestamp - age;
-        if (diff > stalenessThreshold) {
-            return (false, 0);
-        }
-
-        return (ok, val);
-    }
-
-    function _tryReadChainlink() internal view returns (bool, uint) {
-        int answer;
-        uint updatedAt;
-        (, answer,, updatedAt,) =
-            IChainlinkAggregatorV3(chainlink).latestRoundData();
-
-        // Fail if value stale.
-        uint diff = block.timestamp - updatedAt;
-        if (diff > stalenessThreshold) {
-            return (false, 0);
-        }
-
-        // Fail if value negative.
-        if (answer < 0) {
-            return (false, 0);
-        }
-
-        // Adjust decimals, if necessary.
-        uint val = uint(answer);
-        uint decimals_ = IChainlinkAggregatorV3(chainlink).decimals();
-        if (decimals_ != decimals) {
-            val = LibCalc.scale(val, decimals_, decimals);
-        }
-
-        // Fail if value is zero.
-        if (val == 0) {
-            return (false, 0);
-        }
-
-        // Otherwise value is ok.
-        return (true, val);
-    }
-
     function _toInt(uint128 val) private pure returns (int) {
         // Note that int(type(uint128).max) == type(uint128).max.
         return int(uint(val));
+    }
+
+    function _shorten(PriceData[] memory a, uint len)
+        internal
+        pure
+        returns (PriceData[] memory)
+    {
+        if (len >= a.length) return a;
+        PriceData[] memory b = new PriceData[](len);
+        for (uint i = 0; i < len; i++) {
+            b[i] = a[i];
+        }
+        return b;
+    }
+
+    function _median(PriceData[] memory price)
+        private
+        view
+        returns (PriceData memory)
+    {
+        PriceData[] memory res =
+            _quickSort(price, int(0), int(price.length - 1));
+        if (res.length % 2 == 0) {
+            uint a = res[(res.length / 2) - 1].val;
+            uint b = res[(res.length / 2)].val;
+            return
+                PriceData({val: (a + b) / 2, age: res[res.length / 2 - 1].age});
+        } else {
+            return res[res.length / 2];
+        }
+    }
+
+    function _quickSort(PriceData[] memory price, int left, int right)
+        private
+        view
+        returns (PriceData[] memory)
+    {
+        int i = left;
+        int j = right;
+        if (i == j) return price;
+        uint pivot = price[uint(left + (right - left) / 2)].val;
+        while (i <= j) {
+            while (price[uint(i)].val < pivot) i++;
+            while (pivot < price[uint(j)].val) j--;
+            if (i <= j) {
+                (price[uint(i)], price[uint(j)]) =
+                    (price[uint(j)], price[uint(i)]);
+                i++;
+                j--;
+            }
+        }
+        if (left < j) _quickSort(price, left, j);
+        if (i < right) _quickSort(price, i, right);
+        return price;
     }
 
     // -- Overridden Toll Functions --
@@ -429,11 +383,19 @@ contract Aggor_COUNTER is Aggor {
     // @todo   ^^^^^^^ Adjust name of Aggor instance
     constructor(
         address initialAuthed,
-        address chronicle_,
-        address chainlink_,
-        address uniPool_,
-        bool uniUseToken0AsBase
+        bytes32 wat_,
+        address[] memory oracles_,
+        address twap_,
+        uint acceptableAgeThreshold_,
+        bool isPeggedAsset_
     )
-        Aggor(initialAuthed, chronicle_, chainlink_, uniPool_, uniUseToken0AsBase)
+        Aggor(
+            initialAuthed,
+            wat_,
+            oracles_,
+            twap_,
+            acceptableAgeThreshold_,
+            isPeggedAsset_
+        )
     {}
 }
