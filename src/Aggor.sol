@@ -28,14 +28,14 @@ contract Aggor is IAggor, Auth, Toll {
     /// @inheritdoc IAggor
     uint8 public constant decimals = 18;
 
+    /// @inheritdoc IChronicle
+    bytes32 public immutable wat;
+
     /// @inheritdoc IAggor
     uint public agreementDistance;
 
     /// @inheritdoc IAggor
     bool public isPeggedAsset;
-
-    /// @notice The set of Oracle from which we will query price.
-    address[] private _oracles;
 
     /// @inheritdoc IAggor
     address public twap;
@@ -43,8 +43,8 @@ contract Aggor is IAggor, Auth, Toll {
     /// @inheritdoc IAggor
     uint public acceptableAgeThreshold;
 
-    /// @inheritdoc IChronicle
-    bytes32 public immutable wat;
+    /// @notice The set of Oracles from which we will query price.
+    address[] internal _oracles;
 
     /// @dev We track both age and price together, this struct pairs them which
     //       can then be sorted, picked for median, etc.
@@ -291,15 +291,18 @@ contract Aggor is IAggor, Auth, Toll {
     }
 
     function _setOracles(address[] memory oracles_) internal {
+        uint oldLen = _oracles.length;
         _oracles = new address[](oracles_.length);
         for (uint i = 0; i < oracles_.length; i++) {
             require(oracles_[i] != address(0));
             _oracles[i] = oracles_[i];
         }
+        emit OraclesUpdated(msg.sender, oldLen, oracles_.length);
     }
 
     /// @inheritdoc IAggor
     function setTwap(address twap_) external auth {
+        emit TwapUpdated(msg.sender, twap, twap_);
         twap = twap_;
     }
 
@@ -309,7 +312,7 @@ contract Aggor is IAggor, Auth, Toll {
     }
 
     // -- Private Helpers --
-    function _toInt(uint128 val) private pure returns (int) {
+    function _toInt(uint128 val) internal pure returns (int) {
         // Note that int(type(uint128).max) == type(uint128).max.
         return int(uint(val));
     }
@@ -320,15 +323,14 @@ contract Aggor is IAggor, Auth, Toll {
         returns (PriceData[] memory)
     {
         if (len >= a.length) return a;
-        PriceData[] memory b = new PriceData[](len);
-        for (uint i = 0; i < len; i++) {
-            b[i] = a[i];
+        assembly {
+            mstore(a, len)
         }
-        return b;
+        return a;
     }
 
     function _median(PriceData[] memory price)
-        private
+        internal
         view
         returns (PriceData memory)
     {
@@ -337,15 +339,16 @@ contract Aggor is IAggor, Auth, Toll {
         if (res.length % 2 == 0) {
             uint a = res[(res.length / 2) - 1].val;
             uint b = res[(res.length / 2)].val;
+            uint distMedian = (a / 2) + (b / 2) + (((a % 2) + (b % 2)) / 2);
             return
-                PriceData({val: (a + b) / 2, age: res[res.length / 2 - 1].age});
+                PriceData({val: distMedian, age: res[(res.length / 2) - 1].age});
         } else {
             return res[res.length / 2];
         }
     }
 
     function _quickSort(PriceData[] memory price, int left, int right)
-        private
+        internal
         view
         returns (PriceData[] memory)
     {

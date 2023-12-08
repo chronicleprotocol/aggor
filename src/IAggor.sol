@@ -30,6 +30,20 @@ interface IAggor is IChronicle {
     //          considered "fresh".
     function acceptableAgeThreshold() external view returns (uint);
 
+    /// @notice As price is determined during read this struct tracks
+    ///         information about how the price was obtained.
+    /// @param returnlevel The point along the degradation path at which the
+    ///        price was returned. Lower is better, i.e. 1 is better than 6.
+    /// @param countGoodOraclePrices The number of Oracles that returned a trustworthy price.
+    /// @param countFailedOraclePrices The number of Oracles that returned a bad price.
+    /// @param twapUsed Flag as to whether TWAP had to be used as a tie-breaker.
+    struct StatusInfo {
+        uint returnLevel;
+        uint countGoodOraclePrices;
+        uint countFailedOraclePrices;
+        bool twapUsed;
+    }
+
     /// @notice Emitted when the agreement distance is changed.
     /// @param caller The caller's address
     /// @param oldAgreementDistance Current agreement distance
@@ -49,6 +63,18 @@ interface IAggor is IChronicle {
         uint oldAcceptableAgeThreshold,
         uint newAcceptableAgeThreshold
     );
+
+    /// @notice Emitted when Oracle set is changed.
+    /// @param caller The caller's address
+    /// @param oldLen Current number of Oracles
+    /// @param newLen Updated number of Oracles
+    event OraclesUpdated(address indexed caller, uint oldLen, uint newLen);
+
+    /// @notice Emitted when TWAP is changed.
+    /// @param caller The caller's address
+    /// @param oldTwap Current twap address
+    /// @param newTwap Updated twap address
+    event TwapUpdated(address indexed caller, address oldTwap, address newTwap);
 
     /// @notice Returns the oracle's latest value.
     /// @dev Provides partial compatibility to Chainlink's
@@ -73,20 +99,6 @@ interface IAggor is IChronicle {
     /// @custom:deprecated See https://docs.chain.link/data-feeds/api-reference/#latestanswer.
     /// @return answer The oracle's latest value.
     function latestAnswer() external view returns (int);
-
-    /// @notice As price is determined during read this struct tracks
-    ///         information about how the price was obtained.
-    /// @param returnlevel The point along the degradation path at which the
-    ///        price was returned. Lower is better, i.e. 1 is better than 6.
-    /// @param countGoodOraclePrices The number of Oracles that returned a trustworthy price.
-    /// @param countFailedOraclePrices The number of Oracles that returned a bad price.
-    /// @param twapUsed Flag as to whether TWAP had to be used as a tie-breaker.
-    struct StatusInfo {
-        uint returnLevel;
-        uint countGoodOraclePrices;
-        uint countFailedOraclePrices;
-        bool twapUsed;
-    }
 
     /// @notice Returns the aggregate price along with introspection information.
     /// @return val The price obtained.
