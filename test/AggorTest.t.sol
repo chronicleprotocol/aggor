@@ -122,7 +122,7 @@ contract AggorTest is Test {
         (ok, val, age) = aggor.tryReadWithAge();
         assertTrue(ok);
         assertEq(val, 1 ether);
-        assertEq(age, ts1);
+        assertEq(age, ts2);
 
         (,, status) = aggor.readWithStatus();
         assertEq(status.returnLevel, 1);

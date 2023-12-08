@@ -1,17 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.16;
 
-import {IERC20} from "forge-std/interfaces/IERC20.sol";
-
-import {IUniswapV3PoolImmutables} from
-    "uniswap/v3-core/contracts/interfaces/pool/IUniswapV3PoolImmutables.sol";
-
 import {IChronicle} from "chronicle-std/IChronicle.sol";
 import {Auth} from "chronicle-std/auth/Auth.sol";
 import {Toll} from "chronicle-std/toll/Toll.sol";
 
 import {LibCalc} from "./libs/LibCalc.sol";
-import {LibUniswapOracles} from "./libs/LibUniswapOracles.sol";
 
 import {IAggor} from "./IAggor.sol";
 
@@ -22,8 +16,21 @@ import {IAggor} from "./IAggor.sol";
  *         value
  */
 contract Aggor is IAggor, Auth, Toll {
+    // -- Internal Types --
+
+    /// @dev PriceData encapsulated an oracle's val and age.
+    struct PriceData {
+        uint val;
+        uint age;
+    }
+
+    // -- Constants & Immutables --
+
+    /// @dev Decimals used in Chainlink compatibility functions.
+    uint internal constant _DECIMALS_CHAINLINK = 8;
+
     /// @dev Percentage scale is in basis points (BPS).
-    uint16 internal constant _pscale = 10_000;
+    uint16 internal constant _BPS = 10_000;
 
     /// @inheritdoc IAggor
     uint8 public constant decimals = 18;
@@ -32,10 +39,14 @@ contract Aggor is IAggor, Auth, Toll {
     bytes32 public immutable wat;
 
     /// @inheritdoc IAggor
-    uint public agreementDistance;
+    bool public immutable isPeggedAsset;
 
+    // -- Storage --
+
+    // TODO: Why agreement distance not set in constructor?
+    // TODO: Rename to threshold?
     /// @inheritdoc IAggor
-    bool public isPeggedAsset;
+    uint public agreementDistance;
 
     /// @inheritdoc IAggor
     address public twap;
@@ -43,15 +54,10 @@ contract Aggor is IAggor, Auth, Toll {
     /// @inheritdoc IAggor
     uint public acceptableAgeThreshold;
 
-    /// @notice The set of Oracles from which we will query price.
+    /// @dev The set of Oracles from which prices are queried.
     address[] internal _oracles;
 
-    /// @dev We track both age and price together, this struct pairs them which
-    //       can then be sorted, picked for median, etc.
-    struct PriceData {
-        uint val;
-        uint age;
-    }
+    // -- Constructor --
 
     constructor(
         address initialAuthed,
@@ -61,117 +67,140 @@ contract Aggor is IAggor, Auth, Toll {
         uint acceptableAgeThreshold_,
         bool isPeggedAsset_
     ) Auth(initialAuthed) {
-        _setOracles(oracles_);
-
+        // Set immutables.
         wat = wat_;
-        twap = twap_;
         isPeggedAsset = isPeggedAsset_;
-        acceptableAgeThreshold = acceptableAgeThreshold_;
+
+        // Set configurations.
+        _setOracles(oracles_);
+        _setTwap(twap_);
+        _setAcceptableAgeThreshold(acceptableAgeThreshold_);
     }
 
     // -- Read Functionality --
 
     function _read() internal view returns (uint, uint, StatusInfo memory) {
-        // Instrospect and track status of this workflow
+        // Price encapsulates the val and age, and status introspect data,
+        // returned by the function.
+        PriceData memory price;
         StatusInfo memory status;
 
-        /// @dev In-memory arrays don't have push() so instantiate with enough slots
-        /// for all prices. Then we will _shorten() to get "pushed" prices. You
-        /// MUST increment goodPricesTotal whenever goodPrices is assigned a price.
-        PriceData[] memory goodPrices = new PriceData[](_oracles.length + 1);
-        uint goodPricesTotal;
+        // Allocate memory array for price datas with capacity for each oracle
+        // plus one extra slot. The extra slot may be used by a tie-breaker, ie
+        // either twap or pegged asset heuristic.
+        //
+        // The array will be "shortened" via updating its length to the actual
+        // number of prices included.
+        PriceData[] memory prices = new PriceData[](_oracles.length + 1);
+        uint pricesCtr;
 
+        // Return values of an IChronicle::tryReadWithAge() call.
+        // Note that each oracle is abstracted via an IChronicle interface
+        // adapter.
         bool ok;
         uint val;
         uint age;
 
-        for (uint i = 0; i < _oracles.length; i++) {
+        // Try reading each oracle.
+        for (uint i; i < _oracles.length; i++) {
             (ok, val, age) = IChronicle(_oracles[i]).tryReadWithAge();
-            if (
-                ok && val != 0 && age <= block.timestamp
-                    && (block.timestamp - age) <= acceptableAgeThreshold
-            ) {
-                goodPrices[goodPricesTotal++] = PriceData(val, age);
+
+            if (ok && _ageOk(age)) {
+                prices[pricesCtr++] = PriceData(val, age);
             } else {
                 status.countFailedOraclePrices++;
             }
         }
 
-        status.countGoodOraclePrices = goodPricesTotal;
+        // Store number of successful oracle reads in status struct.
+        status.countGoodOraclePrices = pricesCtr;
 
-        // Preferred scenario, will fall through to less desirable ones below.
-        if (goodPricesTotal >= 3) {
-            PriceData memory price =
-                _median(_shorten(goodPrices, goodPricesTotal));
+        if (pricesCtr >= 3) {
+            // == Level 1 ==
+            // Good prices : >= 3
+            // Result      : median(prices)
             status.returnLevel = 1;
+
+            price = _median(_shorten(prices, pricesCtr));
             return (price.val, price.age, status);
         }
 
-        if (goodPricesTotal == 2) {
-            // Try to return mean of Oracles:
-            // Prices from the Oracles MUST be within the agreement distance (%)
+        if (pricesCtr == 2) {
             if (
                 LibCalc.pctDiff(
-                    uint128(goodPrices[0].val),
-                    uint128(goodPrices[1].val),
-                    _pscale
+                    uint128(prices[0].val), uint128(prices[1].val), _BPS
                 ) <= agreementDistance
             ) {
+                // == Level 2 ==
+                // Good prices : 2 with both values in agreement distance
+                // Result      : median(prices)
                 status.returnLevel = 2;
-                return (
-                    (goodPrices[0].val + goodPrices[1].val) / 2,
-                    goodPrices[0].age,
-                    status
-                );
+
+                price.val = (prices[0].val + prices[1].val) / 2;
+                price.age = prices[0].age > prices[1].age
+                        ? prices[1].age
+                        : prices[0].age;
+
+                return (price.val, price.age, status);
             } else {
-                // Otherwise, use alternate methods to obtain median:
+                // == Level 3 ==
+                // Good prices : 2 with both values NOT in agreement distance
+                // Result      : median(price ++ tiebreaker)
+                //
+                // Note that tie breaker may be either a pegged price heuristic
+                // (if Aggor is running in pegged asset mode) or a twap (if set).
+                //
+                // If no tie breaker exists level 6 will be reached, ie the oracle
+                // read failed and no price is returned.
                 status.returnLevel = 3;
+
                 if (isPeggedAsset) {
-                    // NOTE(jamesr) Aggor treats all price values as having 18
-                    // decimals, at least until necessary to scale down, e.g.
-                    // the return from latestAnswer(). So the notion of
-                    // "inserting 1 into the price set for median" really means
-                    // inserting 1 ether.
-                    goodPrices[goodPricesTotal++] =
-                        PriceData(1 ether, block.timestamp);
-                    PriceData memory price =
-                        _median(_shorten(goodPrices, goodPricesTotal));
+                    // Note that pegged asset mode assumes a price of 1:1.
+                    // Pegged asset heuristic is to add a price of 1 (ie 1e18)
+                    // manually into the price list and using the median of the
+                    // list afterwards.
+                    prices[pricesCtr++] = PriceData(1e18, block.timestamp);
+                    price = _median(_shorten(prices, pricesCtr++));
                     return (price.val, price.age, status);
                 }
+
                 if (twap != address(0)) {
                     (ok, val, age) = IChronicle(twap).tryReadWithAge();
-                    if (ok) {
-                        goodPrices[goodPricesTotal++] = PriceData(val, age);
+
+                    if (ok && _ageOk(age)) {
+                        prices[pricesCtr++] = PriceData(val, age);
                         status.twapUsed = true;
-                        PriceData memory price =
-                            _median(_shorten(goodPrices, goodPricesTotal));
+                        price = _median(_shorten(prices, pricesCtr));
                         return (price.val, price.age, status);
                     }
                 }
             }
         }
 
-        // If only one oracle with good data, return that
-        if (goodPricesTotal == 1) {
+        if (pricesCtr == 1) {
+            // == Level 4 ==
+            // Good price : 1
+            // Result     : prices[0]
             status.returnLevel = 4;
-            return (goodPrices[0].val, goodPrices[0].age, status);
+            return (prices[0].val, prices[0].age, status);
         }
 
-        // Last attempt to get price, return TWAP if possible.
         if (twap != address(0)) {
+            // == Level 5 ==
+            // Good price : 0
+            // Result     : twap
             (ok, val, age) = IChronicle(twap).tryReadWithAge();
-            if (
-                ok && age <= block.timestamp // Can't be from the future
-                    && (block.timestamp - age) <= acceptableAgeThreshold
-            ) {
-                status.twapUsed = true;
+
+            if (ok && _ageOk(age)) {
                 status.returnLevel = 5;
+                status.twapUsed = true;
                 return (val, age, status);
             }
         }
 
-        // Finally, no price could be obtained. The defi world has ended,
-        // probably in fire.
+        // == Level 6 ==
+        // Good price : 0
+        // Result     : Failure
         status.returnLevel = 6;
         return (0, 0, status);
     }
@@ -231,7 +260,8 @@ contract Aggor is IAggor, Auth, Toll {
     /// @inheritdoc IAggor
     function latestAnswer() external view toll returns (int) {
         (uint val,,) = _read();
-        return _toInt(uint128(LibCalc.scale(val, decimals, 8)));
+        return
+            _toInt(uint128(LibCalc.scale(val, decimals, _DECIMALS_CHAINLINK)));
     }
 
     // -- IAggor
@@ -264,6 +294,7 @@ contract Aggor is IAggor, Auth, Toll {
         }
     }
 
+    /// @inheritdoc IAggor
     function setAcceptableAgeThreshold(uint acceptableAgeThreshold_)
         external
         auth
@@ -273,7 +304,6 @@ contract Aggor is IAggor, Auth, Toll {
 
     function _setAcceptableAgeThreshold(uint acceptableAgeThreshold_)
         internal
-        auth
     {
         require(acceptableAgeThreshold_ != 0);
 
@@ -293,7 +323,7 @@ contract Aggor is IAggor, Auth, Toll {
     function _setOracles(address[] memory oracles_) internal {
         uint oldLen = _oracles.length;
         _oracles = new address[](oracles_.length);
-        for (uint i = 0; i < oracles_.length; i++) {
+        for (uint i; i < oracles_.length; i++) {
             require(oracles_[i] != address(0));
             _oracles[i] = oracles_[i];
         }
@@ -302,16 +332,25 @@ contract Aggor is IAggor, Auth, Toll {
 
     /// @inheritdoc IAggor
     function setTwap(address twap_) external auth {
-        emit TwapUpdated(msg.sender, twap, twap_);
-        twap = twap_;
+        _setTwap(twap_);
     }
+
+    function _setTwap(address twap_) internal {
+        if (twap != twap_) {
+            emit TwapUpdated(msg.sender, twap, twap_);
+            twap = twap_;
+        }
+    }
+
+    // -- Public View Functions --
 
     /// @inheritdoc IAggor
     function oracles() external view returns (address[] memory) {
         return _oracles;
     }
 
-    // -- Private Helpers --
+    // -- Internal Helpers --
+
     function _toInt(uint128 val) internal pure returns (int) {
         // Note that int(type(uint128).max) == type(uint128).max.
         return int(uint(val));
@@ -322,46 +361,63 @@ contract Aggor is IAggor, Auth, Toll {
         pure
         returns (PriceData[] memory)
     {
-        if (len >= a.length) return a;
+        assert(len <= a.length);
+        //if (len >= a.length) return a;
         assembly {
             mstore(a, len)
         }
         return a;
     }
 
-    function _median(PriceData[] memory price)
+    function _ageOk(uint age) internal view returns (bool) {
+        // Age is ok if its not from the future and the threshold check
+        // succeeds.
+        return age <= block.timestamp
+            ? (block.timestamp - age) <= acceptableAgeThreshold
+            : false;
+    }
+
+    function _median(PriceData[] memory prices)
         internal
         view
         returns (PriceData memory)
     {
-        PriceData[] memory res =
-            _quickSort(price, int(0), int(price.length - 1));
-        if (res.length % 2 == 0) {
-            uint a = res[(res.length / 2) - 1].val;
-            uint b = res[(res.length / 2)].val;
-            uint distMedian = (a / 2) + (b / 2) + (((a % 2) + (b % 2)) / 2);
-            return
-                PriceData({val: distMedian, age: res[(res.length / 2) - 1].age});
+        PriceData[] memory sorted = _quickSort(prices, 0, prices.length - 1);
+
+        uint half = sorted.length / 2;
+
+        if (sorted.length % 2 == 0) {
+            PriceData memory a = sorted[half - 1];
+            PriceData memory b = sorted[half];
+
+            // forgefmt: disable-next-item
+            uint median = (a.val / 2)
+                        + (b.val / 2)
+                        + (((a.val % 2) + (b.val % 2)) / 2);
+
+            // TODO: Comment about age.
+            uint age = a.age > b.age ? b.age : a.age;
+
+            return PriceData({val: median, age: age});
         } else {
-            return res[res.length / 2];
+            return sorted[half];
         }
     }
 
-    function _quickSort(PriceData[] memory price, int left, int right)
+    function _quickSort(PriceData[] memory price, uint left, uint right)
         internal
         view
         returns (PriceData[] memory)
     {
-        int i = left;
-        int j = right;
+        uint i = left;
+        uint j = right;
         if (i == j) return price;
-        uint pivot = price[uint(left + (right - left) / 2)].val;
+        uint pivot = price[left + (right - left) / 2].val;
         while (i <= j) {
-            while (price[uint(i)].val < pivot) i++;
-            while (pivot < price[uint(j)].val) j--;
+            while (price[i].val < pivot) i++;
+            while (pivot < price[j].val) j--;
             if (i <= j) {
-                (price[uint(i)], price[uint(j)]) =
-                    (price[uint(j)], price[uint(i)]);
+                (price[i], price[j]) = (price[j], price[i]);
                 i++;
                 j--;
             }

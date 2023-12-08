@@ -32,7 +32,7 @@ interface IAggor is IChronicle {
 
     /// @notice As price is determined during read this struct tracks
     ///         information about how the price was obtained.
-    /// @param returnlevel The point along the degradation path at which the
+    /// @param returnLevel The point along the degradation path at which the
     ///        price was returned. Lower is better, i.e. 1 is better than 6.
     /// @param countGoodOraclePrices The number of Oracles that returned a trustworthy price.
     /// @param countFailedOraclePrices The number of Oracles that returned a bad price.
@@ -112,6 +112,8 @@ interface IAggor is IChronicle {
     /// @notice Updates the agreement distance (%).
     /// @param agreementDistance The percentage under which Oracle prices must agree.
     function setAgreementDistance(uint agreementDistance) external;
+
+    function setAcceptableAgeThreshold(uint acceptableAgeThreshold) external;
 
     /// @notice Updates the set of Oracles to query.
     /// @param oracles The set of oracle addresses to update. Will overwrite
