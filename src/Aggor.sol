@@ -103,8 +103,10 @@ contract Aggor is IAggor, Auth, Toll {
 
     // -- Read Functionality --
 
-    // Note that age is always block.timestamp.
-    // Spark does not read age anyway.
+    /// @dev Returns Aggor's derived value, timestamp and status information.
+    ///
+    /// @dev Note that the value's age is always block.timestamp expect the 
+    ///      value itself is invalid.
     function _read() internal view returns (uint128, uint, Status memory) {
         // Read chronicle and chainlink oracles.
         (bool ok_chr, uint128 val_chr) = _readChronicle();
@@ -189,7 +191,7 @@ contract Aggor is IAggor, Auth, Toll {
             }
         }
 
-        // Otherwise no value possible.
+        // Otherwise no value derivation possible.
         return (
             0,
             0,
@@ -244,11 +246,11 @@ contract Aggor is IAggor, Auth, Toll {
 
         // Fail if any of
         // - not updated in current round
-        // - answer not in [1, type(uint128).max)
+        // - answer not in [1, type(uint128).max]
         // - answer stale
         if (
             answeredInRound < roundId
-                || (answer <= 0 || answer >= int(uint(type(uint128).max)))
+                || (answer <= 0 || uint(answer) > uint(type(uint128).max))
                 || updatedAt + ageThreshold < block.timestamp
         ) {
             return (false, 0);
