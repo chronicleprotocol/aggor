@@ -12,34 +12,34 @@ import {OracleLibrary} from
 library LibUniswapOracles {
     /// @dev The maximum number of decimals for the base asset supported.
     ///      Note that this constraint comes from Uniswap's OracleLibrary which
-    ///      takes the base asset amount as type uint128.
+    ///      expects the base token amount as type uint128.
     uint internal constant MAX_UNI_BASE_DEC = 38;
 
-    /// @notice Reads the TWAP derived price from a Uniswap oracle.
+    /// @dev Reads the TWAP derived price from a Uniswap oracle.
+    ///
     /// @dev The Uniswap pool address + pair addresses can be discovered at
     ///      https://app.uniswap.org/#/swap
-    /// @param uniPool The Uniswap pool that wil be observed.
-    /// @param uniBasePair The base pair for the pool, e.g. WETH in WETHUSDT.
-    /// @param uniQuotePair The quote pair for the pool, e.g. USDT in WETHUSDT.
-    /// @param uniBaseDec The decimals of the base pair ERC-20 token.
-    /// @param secondsAgo The time in seconds to "look back" per TWAP.
+    /// @param pool The Uniswap pool that wil be observed.
+    /// @param baseToken The base token for the pool, e.g. WETH in WETHUSDT.
+    /// @param quoteToken The quote pair for the pool, e.g. USDT in WETHUSDT.
+    /// @param baseDecimals The decimals of the base pair ERC-20 token.
+    /// @param lookback The time in seconds to look back per TWAP.
     function readOracle(
-        address uniPool,
-        address uniBasePair,
-        address uniQuotePair,
-        uint8 uniBaseDec,
-        uint32 secondsAgo
+        address pool,
+        address baseToken,
+        address quoteToken,
+        uint8 baseDecimals,
+        uint32 lookback
     ) internal view returns (uint) {
         // Note that 10**(MAX_UNI_BASE_DEC + 1) would overflow type uint128.
-        require(uniBaseDec <= MAX_UNI_BASE_DEC);
+        require(baseDecimals <= MAX_UNI_BASE_DEC);
 
-        (int24 tick,) = OracleLibrary.consult(address(uniPool), secondsAgo);
+        (int24 tick,) = OracleLibrary.consult(address(pool), lookback);
 
-        // Calculate exactly 1 unit of the base pair for quote
-        uint128 amt = uint128(1 * (10 ** uniBaseDec));
+        // Calculate exactly 1 unit of the base pair for quote.
+        uint128 amt = uint128(10 ** baseDecimals);
 
-        uint val =
-            OracleLibrary.getQuoteAtTick(tick, amt, uniBasePair, uniQuotePair);
-        return val;
+        // Use Uniswap's periphery library to get quote.
+        return OracleLibrary.getQuoteAtTick(tick, amt, baseToken, quoteToken);
     }
 }
