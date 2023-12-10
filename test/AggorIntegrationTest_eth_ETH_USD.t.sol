@@ -12,9 +12,10 @@ import {Aggor} from "src/Aggor.sol";
 
 /**
  * @dev Aggor Integration Test for :
- *      - chain   : Ethereum mainnet
- *      - wat     : ETH/USD
- *      - oracles :
+ *      - chain       : Ethereum
+ *      - wat         : ETH/USD
+ *      - oracles     : Chronicle, Chainlink
+ *      - tie breaker : Uniswap Twap
  */
 contract AggorIntegrationTest_eth_ETH_USD is Test {
     Aggor aggor;
