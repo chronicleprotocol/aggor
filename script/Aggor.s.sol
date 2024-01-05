@@ -53,13 +53,16 @@ contract AggorScript is Script {
             address token1 = IUniswapV3Pool(uniswapPool).token1();
             require(uniswapBaseToken == token0 || uniswapBaseToken == token1);
             require(uniswapQuoteToken == token0 || uniswapQuoteToken == token1);
-            require(uniswapBaseTokenDecimals == IERC20(uniswapBaseToken).decimals());
+            require(
+                uniswapBaseTokenDecimals == IERC20(uniswapBaseToken).decimals()
+            );
             require(uniswapLookback != uint32(0));
 
             // Verify Uniswap TWAP is initialized.
-            // Specifically it is verified that the TWAP's oldest observation is 
+            // Specifically it is verified that the TWAP's oldest observation is
             // older then the uniswapLookback argument.
-            uint32 oldestObservation = OracleLibrary.getOldestObservationSecondsAgo(uniswapPool);
+            uint32 oldestObservation =
+                OracleLibrary.getOldestObservationSecondsAgo(uniswapPool);
             require(oldestObservation + uniswapLookback < block.timestamp);
         } else {
             require(uniswapPool == address(0));
