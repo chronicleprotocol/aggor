@@ -331,7 +331,7 @@ contract Aggor is IAggor, Auth, Toll {
 
     function _setAgreementDistance(uint16 agreementDistance_) internal {
         require(agreementDistance_ != 0);
-        require(agreementDistance <= _BPS);
+        require(agreementDistance_ <= _BPS);
 
         if (agreementDistance != agreementDistance_) {
             emit AgreementDistanceUpdated(
