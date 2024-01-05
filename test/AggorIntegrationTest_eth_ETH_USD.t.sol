@@ -47,7 +47,7 @@ contract AggorIntegrationTest_eth_ETH_USD is Test {
 
     function setUp() public {
         // Start mainnet fork.
-        vm.createSelectFork("http://127.0.0.1:8545");
+        vm.createSelectFork("https://rpc.ankr.com/eth");
 
         // Deploy aggor.
         aggor = new Aggor(
