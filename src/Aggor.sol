@@ -26,14 +26,13 @@ contract Aggor is IAggor, Auth, Toll {
     uint16 internal constant _BPS = 10_000;
 
     uint8 internal constant _DECIMALS_CHRONICLE = 18;
-    uint8 internal constant _DECIMALS_CHAINLINK = 8;
 
     // -- Immutable Configurations --
 
     // -- Chainlink Compatibility
 
     /// @inheritdoc IAggor
-    uint8 public constant decimals = _DECIMALS_CHAINLINK;
+    uint8 public immutable decimals;
 
     // -- Pegged Asset Mode
 
@@ -96,6 +95,9 @@ contract Aggor is IAggor, Auth, Toll {
         uniswapBaseTokenDecimals = uniswapBaseTokenDecimals_;
         uniswapLookback = uniswapLookback_;
 
+        // Fetch chainlink's decimals and set as own.
+        decimals = IChainlinkAggregatorV3(chainlink_).decimals();
+
         // Set configurations.
         _setAgreementDistance(agreementDistance_);
         _setAgeThreshold(ageThreshold_);
@@ -105,7 +107,7 @@ contract Aggor is IAggor, Auth, Toll {
 
     /// @dev Returns Aggor's derived value, timestamp and status information.
     ///
-    /// @dev Note that the value's age is always block.timestamp expect the 
+    /// @dev Note that the value's age is always block.timestamp except if the
     ///      value itself is invalid.
     function _read() internal view returns (uint128, uint, Status memory) {
         // Read chronicle and chainlink oracles.
@@ -223,7 +225,7 @@ contract Aggor is IAggor, Auth, Toll {
         }
 
         // Scale value down from chronicle decimals to aggor decimals.
-        // assert(_DECIMALS_CHRONICLES <= decimals).
+        // assert(_DECIMALS_CHRONICLES >= decimals).
         val /= 10 ** (_DECIMALS_CHRONICLE - decimals);
 
         return (true, uint128(val));
@@ -236,21 +238,17 @@ contract Aggor is IAggor, Auth, Toll {
     function _readChainlink() internal view returns (bool, uint128) {
         // forgefmt: disable-next-item
         (
-            uint80 roundId,
+            /*uint80 roundId*/,
             int answer,
             /*uint startedAt*/,
             uint updatedAt,
-            uint80 answeredInRound
+            /*uint80 answeredInRound*/
         ) = IChainlinkAggregatorV3(chainlink).latestRoundData();
         // assert(updatedAt <= block.timestamp);
 
-        // Fail if any of
-        // - not updated in current round
-        // - answer not in [1, type(uint128).max]
-        // - answer stale
+        // Fail if answer not in [1, type(uint128).max] or answer stale.
         if (
-            answeredInRound < roundId
-                || (answer <= 0 || uint(answer) > uint(type(uint128).max))
+            (answer <= 0 || uint(answer) > uint(type(uint128).max))
                 || updatedAt + ageThreshold < block.timestamp
         ) {
             return (false, 0);
@@ -302,7 +300,7 @@ contract Aggor is IAggor, Auth, Toll {
         answer = int(uint(val));
         startedAt = 0;
         updatedAt = age;
-        answeredInRound = roundId;
+        answeredInRound = 1; // = roundId
     }
 
     /// @inheritdoc IAggor

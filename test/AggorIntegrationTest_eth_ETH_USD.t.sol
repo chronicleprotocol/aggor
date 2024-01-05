@@ -11,11 +11,11 @@ import {IChronicle} from "chronicle-std/IChronicle.sol";
 import {Aggor} from "src/Aggor.sol";
 
 /**
- * @dev Aggor Integration Test for :
+ * @dev Aggor Integration Test for
  *      - chain       : Ethereum
  *      - wat         : ETH/USD
  *      - oracles     : Chronicle, Chainlink
- *      - tie breaker : Uniswap Twap
+ *      - tie breaker : Uniswap Twap USDC/WETH
  */
 contract AggorIntegrationTest_eth_ETH_USD is Test {
     Aggor aggor;
@@ -43,9 +43,13 @@ contract AggorIntegrationTest_eth_ETH_USD is Test {
 
     // Configurations:
     uint16 agreementDistance = 500; // 5%
-    uint32 acceptableAgeThreshold = 1 days; // 1 day
+    uint32 ageThreshold = 1 days; // 1 day
 
     function setUp() public {
+        // Start mainnet fork.
+        vm.createSelectFork("http://127.0.0.1:8545");
+
+        // Deploy aggor.
         aggor = new Aggor(
             address(this),
             isPeggedAsset,
@@ -58,11 +62,8 @@ contract AggorIntegrationTest_eth_ETH_USD is Test {
             uniswapBaseDec,
             uniswapLookback,
             agreementDistance,
-            acceptableAgeThreshold
+            ageThreshold
         );
-
-        // Start mainnet fork.
-        vm.createSelectFork("http://127.0.0.1:8545");
 
         // Kiss aggor on chronicle oracle.
         vm.prank(IAuth(chronicle).authed()[0]);

@@ -128,10 +128,13 @@ interface IAggor {
     /// @notice Returns the agreement distance in BPS used to determine whether
     ///         a set of oracle values are in agreement.
     /// @return agreementDistance The agreement distance.
-    function agreementDistance() external view returns (uint16 agreementDistance);
+    function agreementDistance()
+        external
+        view
+        returns (uint16 agreementDistance);
 
     /// @notice The acceptable age of price that will be allowed.
-    /// @return ageThreshold The time in seconds where a price is considered 
+    /// @return ageThreshold The time in seconds where a price is considered
     ///                      non-stale.
     function ageThreshold() external view returns (uint32 ageThreshold);
 
