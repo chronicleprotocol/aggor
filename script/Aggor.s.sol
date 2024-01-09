@@ -17,10 +17,16 @@ import {IAggor} from "src/IAggor.sol";
 import {Aggor_BASE_QUOTE_COUNTER as Aggor} from "src/Aggor.sol";
 // @todo      ^^^^ ^^^^^ ^^^^^^^ Adjust name of Aggor instance
 
+import {IChainlinkAggregatorV3} from
+    "src/interfaces/_external/IChainlinkAggregatorV3.sol";
+
 /**
  * @notice Aggor Management Script
  */
 contract AggorScript is Script {
+    /// @dev The maximum number of decimals for Uniswap's base asset supported.
+    uint internal constant MAX_UNISWAP_BASE_DECIMALS = 38;
+
     /// @dev Deploys a new Aggor instance via Greenhouse instance
     ///      `greenhouse` and salt `salt` with `initialAuthed` being the
     ///      address initially auth'ed.
@@ -56,6 +62,7 @@ contract AggorScript is Script {
             require(
                 uniswapBaseTokenDecimals == IERC20(uniswapBaseToken).decimals()
             );
+            require(uniswapBaseTokenDecimals <= MAX_UNISWAP_BASE_DECIMALS);
             require(uniswapLookback != uint32(0));
 
             // Verify Uniswap TWAP is initialized.
@@ -71,6 +78,9 @@ contract AggorScript is Script {
             require(uniswapBaseTokenDecimals == uint8(0));
             require(uniswapLookback == uint32(0));
         }
+
+        // Check chainlink decimals.
+        require(IChainlinkAggregatorV3(chainlink).decimals() <= 18);
 
         // Create creation code with constructor arguments.
         bytes memory creationCode = abi.encodePacked(

@@ -120,9 +120,9 @@ contract Aggor is IAggor, Auth, Toll {
         // - Only chainlink ok
         if (ok_chr && ok_chl) {
             // If both oracles ok and in agreement distance, return their median.
-            if (inAgreementDistance(val_chr, val_chl)) {
+            if (_inAgreementDistance(val_chr, val_chl)) {
                 return (
-                    median(val_chr, val_chl),
+                    _median(val_chr, val_chl),
                     block.timestamp,
                     Status({
                         path: 2,
@@ -264,7 +264,7 @@ contract Aggor is IAggor, Auth, Toll {
     /// @return uint128 The twap's val.
     function _readTwap() internal view returns (bool, uint128) {
         // Read twap.
-        uint twap = uniswapPool.readOracle(
+        uint twap = uniswapPool._readOracle(
             uniswapBaseToken,
             uniswapQuoteToken,
             uniswapBaseTokenDecimals,
@@ -372,8 +372,8 @@ contract Aggor is IAggor, Auth, Toll {
         if (isPeggedAsset) {
             if (a < peggedPrice) {
                 if (b < peggedPrice) {
-                    // [_, _, p] => val = max(a, b)
-                    return (true, max(a, b));
+                    // [_, _, p] => val = _max(a, b)
+                    return (true, _max(a, b));
                 } else {
                     // [_, p, _] => val = p
                     return (true, peggedPrice);
@@ -383,8 +383,8 @@ contract Aggor is IAggor, Auth, Toll {
                     // [_, p, _] => val = p
                     return (true, peggedPrice);
                 } else {
-                    // [p, _, _] => val = min(a, b)
-                    return (true, min(a, b));
+                    // [p, _, _] => val = _min(a, b)
+                    return (true, _min(a, b));
                 }
             }
         }
@@ -395,8 +395,8 @@ contract Aggor is IAggor, Auth, Toll {
             if (ok) {
                 if (a < twap) {
                     if (b < twap) {
-                        // [_, _, twap] => val = max(a, b)
-                        return (true, max(a, b));
+                        // [_, _, twap] => val = _max(a, b)
+                        return (true, _max(a, b));
                     } else {
                         // [_, twap, _] => val = twap
                         return (true, twap);
@@ -406,8 +406,8 @@ contract Aggor is IAggor, Auth, Toll {
                         // [_, twap, _] => val = twap
                         return (true, twap);
                     } else {
-                        // [twap, _, _] => val = min(a, b)
-                        return (true, min(a, b));
+                        // [twap, _, _] => val = _min(a, b)
+                        return (true, _min(a, b));
                     }
                 }
             }
@@ -417,7 +417,7 @@ contract Aggor is IAggor, Auth, Toll {
         return (false, 0);
     }
 
-    function inAgreementDistance(uint128 a, uint128 b)
+    function _inAgreementDistance(uint128 a, uint128 b)
         internal
         view
         returns (bool)
@@ -434,7 +434,7 @@ contract Aggor is IAggor, Auth, Toll {
         return diff <= agreementDistance;
     }
 
-    function median(uint128 a, uint128 b) internal pure returns (uint128) {
+    function _median(uint128 a, uint128 b) internal pure returns (uint128) {
         // Note to cast arguments to uint to avoid overflow possibilites.
         uint sum;
         unchecked {
@@ -446,11 +446,11 @@ contract Aggor is IAggor, Auth, Toll {
         return uint128(sum >> 1);
     }
 
-    function max(uint128 a, uint128 b) internal pure returns (uint128) {
+    function _max(uint128 a, uint128 b) internal pure returns (uint128) {
         return a > b ? a : b;
     }
 
-    function min(uint128 a, uint128 b) internal pure returns (uint128) {
+    function _min(uint128 a, uint128 b) internal pure returns (uint128) {
         return a < b ? a : b;
     }
 
