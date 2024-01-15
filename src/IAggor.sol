@@ -1,99 +1,42 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.16;
 
-import {IChronicle} from "chronicle-std/IChronicle.sol";
+interface IAggor {
+    /// @notice Status encapsulates Aggor's value derivation path.
+    /// @custom:field path The path identifier.
+    /// @custom:field goodOracleCtr The number of oracles used to derive the
+    ///                             value.
+    /// @custom:field badOracleCtr The number of oracles failed to deliver
+    ///                            a usable value.
+    /// @custom:field tieBreakerUsed Whether a tie breaker was used.
+    struct Status {
+        uint path;
+        uint goodOracleCtr;
+        uint badOracleCtr;
+        bool tieBreakerUsed;
+    }
 
-interface IAggor is IChronicle {
-    /// @notice Thrown if an oracle read fails.
-    /// @param oracle The oracle address which read's failed.
-    error OracleReadFailed(address oracle);
-
-    /// @notice Emitted when staleness threshold updated.
+    /// @notice Emitted when agreement distance is updated.
     /// @param caller The caller's address.
-    /// @param oldStalenessThreshold The old staleness threshold.
-    /// @param newStalenessThreshold The new staleness threshold.
-    event StalenessThresholdUpdated(
+    /// @param oldAgreementDistance Old agreement distance
+    /// @param newAgreementDistance New agreement distance
+    event AgreementDistanceUpdated(
         address indexed caller,
-        uint32 oldStalenessThreshold,
-        uint32 newStalenessThreshold
+        uint oldAgreementDistance,
+        uint newAgreementDistance
     );
 
-    /// @notice Emitted when Uniswap is selected or deselected
+    /// @notice Emitted when age threshold updated.
     /// @param caller The caller's address.
-    /// @param oldValue The previous value.
-    /// @param newValue The updated value.
-    event UniswapSelectedUpdated(
-        address indexed caller, bool oldValue, bool newValue
+    /// @param oldAgeThreshold Old age threshold.
+    /// @param newAgeThreshold New age threshold.
+    event AcceptableAgeThresholdUpdated(
+        address indexed caller, uint oldAgeThreshold, uint newAgeThreshold
     );
 
-    /// @notice Emitted when spread is updated.
-    /// @param caller The caller's address.
-    /// @param oldSpread The old spread value.
-    /// @param newSpread The new spread value.
-    event SpreadUpdated(
-        address indexed caller, uint16 oldSpread, uint16 newSpread
-    );
-
-    /// @notice Emitted when Uniswap TWAP's lookback period is updated.
-    /// @param caller The caller's address.
-    /// @param oldUniswapSecondsAgo The old uniswapSecondsAgo value.
-    /// @param newUniswapSecondsAgo The new uniswapSecondsAgo value.
-    event UniswapSecondsAgoUpdated(
-        address indexed caller,
-        uint32 oldUniswapSecondsAgo,
-        uint32 newUniswapSecondsAgo
-    );
-
-    /// @notice Emitted when Chainlink's oracle delivered a zero value.
-    event ChainlinkValueZero();
-
-    /// @notice The Chronicle oracle to aggregate.
-    /// @return The address of the Chronicle oracle being aggregated.
-    function chronicle() external view returns (address);
-
-    /// @notice The Chainlink oracle to aggregate.
-    /// @return The address of the Chainlink oracle being aggregated.
-    function chainlink() external view returns (address);
-
-    /// @notice The Uniswap pool that wil be observed.
-    function uniPool() external view returns (address);
-
-    /// @notice The base pair for the pool, e.g. WETH in WETHUSDT.
-    function uniBasePair() external view returns (address);
-
-    /// @notice The quote pair for the pool, e.g. USDT in WETHUSDT.
-    function uniQuotePair() external view returns (address);
-
-    /// @notice The decimals of the base pair ERC-20 token.
-    function uniBaseDec() external view returns (uint8);
-
-    /// @notice The decimals of the quote pair ERC-20 token.
-    function uniQuoteDec() external view returns (uint8);
-
-    /// @notice The time in seconds to "look back" per TWAP.
-    function uniSecondsAgo() external view returns (uint32);
-
-    /// @notice Determines which secondary oracle is selected. If false
-    //          (default), use Chainlink.
-    function uniswapSelected() external view returns (bool);
-
-    /// @notice The minimum allowed lookback period for the Uniswap TWAP.
-    /// @dev Value is constant and save to cache.
-    /// @return The minimum allowed value for uniSecondsAgo.
-    function minUniSecondsAgo() external view returns (uint32);
-
-    /// @notice Pokes aggor, i.e. updates aggor's value to the mean of
-    ///         Chronicle's and Chainlink's current values.
-    /// @dev Reverts if an oracle's value cannot be read.
-    /// @dev Reverts if an oracle's value is zero.
-    /// @dev Reverts if Chainlink's oracle value is negative.
-    /// @dev Reverts if Chainlink's oracle value is stale as being defined via
-    ///      staleness threshold.
-    function poke() external;
+    // -- Chainlink Compatibility --
 
     /// @notice Returns the number of decimals of the oracle's value.
-    /// @dev Provides partial compatibility with Chainlink's
-    ///      IAggregatorV3Interface.
     /// @return decimals The oracle value's number of decimals.
     function decimals() external view returns (uint8 decimals);
 
@@ -119,46 +62,89 @@ interface IAggor is IChronicle {
     /// @notice Returns the oracle's latest value.
     /// @custom:deprecated See https://docs.chain.link/data-feeds/api-reference/#latestanswer.
     /// @return answer The oracle's latest value.
-    function latestAnswer() external view returns (int);
+    function latestAnswer() external view returns (int answer);
 
-    /// @notice Defines the allowed age of an oracle's value before being
-    ///         declared stale.
-    /// @return The staleness threshold parameter.
-    function stalenessThreshold() external view returns (uint32);
+    // -- Other Read Functions --
 
-    /// @notice Updates the staleness threshold parameter to
-    ///         `stalenessThreshold`.
-    /// @dev Only callable by auth'ed address.
-    /// @dev Reverts if `stalenessThreshold` is zero.
-    /// @param stalenessThreshold The value to update stalenessThreshold to.
-    function setStalenessThreshold(uint32 stalenessThreshold) external;
+    /// @notice Returns the oracle's latest value and status information.
+    /// @return val The oracle's value.
+    /// @return age The value's age.
+    /// @return status The status information.
+    function readWithStatus()
+        external
+        view
+        returns (uint val, uint age, Status memory status);
 
-    /// @notice The percentage difference between the price gotten from
-    ///         oracles, used as a trigger to detect a potentially
-    ///         compromised oracle.
-    /// @dev The percent spread (difference in price) we can tolerate between
-    ///      sources. If the difference is over this amount, assume one of the
-    ///      sources is sussy. Defaults to 5%. Acceptable range 0 - 9999 (99.99%).
-    /// @return The spread as a percentage difference between oracle prices
-    function spread() external view returns (uint16);
+    // -- Immutable Configurations --
 
-    /// @notice Updates the spread parameter to `spread`.
-    /// @dev Only callable by auth'ed address.
-    /// @dev Revert is `spread` is more than 10000.
-    /// @param spread The value to which to update spread.
-    function setSpread(uint16 spread) external;
+    // -- Pegged Asset Mode
 
-    /// @notice Switch from default oracle (Chainlink) to alt (Uniswap),
-    ///         and back.
-    /// @dev Only callable by auth'ed address.
-    /// @param select If true will swap to Uniswap. If false will select
-    ///        Chainlink (default).
-    function useUniswap(bool select) external;
+    /// @notice Returns whether Aggor is in pegged asset mode.
+    /// @return isPeggedAsset Whether the asset pair is pegged or not.
+    function isPeggedAsset() external view returns (bool isPeggedAsset);
 
-    /// @notice Set the Uniswap TWAP lookback period. If never called, default
-    //          is 5m.
-    /// @dev Only callable by auth'ed address.
-    /// @dev Reverts if uniSecondsAgo less than minUniSecondsAgo.
-    /// @param uniSecondsAgo Time in seconds used in the TWAP lookback.
-    function setUniSecondsAgo(uint32 uniSecondsAgo) external;
+    /// @notice Returns the price used as tie breaker when in asset mode.
+    /// @return peggedPrice The price used as tie breaker.
+    function peggedPrice() external view returns (uint128 peggedPrice);
+
+    // -- Oracles
+
+    /// @notice Returns the Chronicle oracle.
+    /// @return chronicle The Chronicle oracle address.
+    function chronicle() external view returns (address chronicle);
+
+    /// @notice Returns the Chainlink oracle.
+    /// @return chainlink The Chainlink oracle address.
+    function chainlink() external view returns (address chainlink);
+
+    // -- Uniswap TWAP
+
+    /// @notice Returns the Uniswap pool used as twap.
+    /// @return pool The Uniswap pool.
+    function uniswapPool() external view returns (address pool);
+
+    /// @notice Returns the Uniswap pool's base token.
+    /// @return baseToken The Uniswap pool's base token.
+    function uniswapBaseToken() external view returns (address baseToken);
+
+    /// @notice Returns the Uniswap pool's quote token.
+    /// @return quoteToken The Uniswap pool's quote token.
+    function uniswapQuoteToken() external view returns (address quoteToken);
+
+    /// @notice Returns the Uniswap pool's base token's decimals.
+    /// @return baseTokenDecimals The Uniswap pool's base token's decimals.
+    function uniswapBaseTokenDecimals()
+        external
+        view
+        returns (uint8 baseTokenDecimals);
+
+    /// @notice Returns the time in seconds to use as lookback for Uniswap Twap
+    ///         oracle.
+    /// @return lookback The time in seconds to use as lookback.
+    function uniswapLookback() external view returns (uint32 lookback);
+
+    // -- Mutable Configurations --
+
+    /// @notice Returns the agreement distance in BPS used to determine whether
+    ///         a set of oracle values are in agreement.
+    /// @return agreementDistance The agreement distance.
+    function agreementDistance()
+        external
+        view
+        returns (uint16 agreementDistance);
+
+    /// @notice The acceptable age of price that will be allowed.
+    /// @return ageThreshold The time in seconds where a price is considered
+    ///                      non-stale.
+    function ageThreshold() external view returns (uint32 ageThreshold);
+
+    // -- Auth'ed Functionality --
+
+    /// @notice Sets the agreement distance.
+    /// @dev Only callable by auth'ed addresses.
+    function setAgreementDistance(uint16 agreementDistance) external;
+
+    /// @notice Sets the age threshold.
+    /// @dev Only callable by auth'ed addresses.
+    function setAgeThreshold(uint32 ageThreshold) external;
 }

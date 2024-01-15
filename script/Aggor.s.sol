@@ -2,40 +2,102 @@
 pragma solidity ^0.8.16;
 
 import {Script} from "forge-std/Script.sol";
-import {console2} from "forge-std/console2.sol";
+import {console2 as console} from "forge-std/console2.sol";
 
 import {IAuth} from "chronicle-std/auth/IAuth.sol";
-import {IToll} from "chronicle-std/toll/IToll.sol";
 
 import {IGreenhouse} from "greenhouse/IGreenhouse.sol";
+import {IERC20} from "forge-std/interfaces/IERC20.sol";
+import {IUniswapV3Pool} from
+    "uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
+import {OracleLibrary} from
+    "uniswap/v3-periphery/contracts/libraries/OracleLibrary.sol";
 
 import {IAggor} from "src/IAggor.sol";
-import {Aggor_COUNTER as Aggor} from "src/Aggor.sol";
-// @todo      ^^^^^^^ Adjust name of Aggor instance.
+import {Aggor_BASE_QUOTE_COUNTER as Aggor} from "src/Aggor.sol";
+// @todo      ^^^^ ^^^^^ ^^^^^^^ Adjust name of Aggor instance
+
+import {IChainlinkAggregatorV3} from
+    "src/interfaces/_external/IChainlinkAggregatorV3.sol";
 
 /**
  * @notice Aggor Management Script
  */
 contract AggorScript is Script {
-    /// @dev Deploys a new Aggor instance via Greenhouse instance `greenhouse`
-    ///      and salt `salt` with `initialAuthed` being the address initially
-    ///      authed.
-    ///
-    ///      The other arguments are Aggor's additional constructor arguments.
+    /// @dev The maximum number of decimals for Uniswap's base asset supported.
+    uint internal constant MAX_UNISWAP_BASE_DECIMALS = 38;
+
+    /// @dev Deploys a new Aggor instance via Greenhouse instance
+    ///      `greenhouse` and salt `salt` with `initialAuthed` being the
+    ///      address initially auth'ed.
     function deploy(
         address greenhouse,
         bytes32 salt,
         address initialAuthed,
+        bool isPeggedAsset,
+        uint128 peggedPrice,
         address chronicle,
         address chainlink,
-        address uniPool,
-        bool uniUseToken0AsBase
+        address uniswapPool,
+        address uniswapBaseToken,
+        address uniswapQuoteToken,
+        uint8 uniswapBaseTokenDecimals,
+        uint32 uniswapLookback,
+        uint16 agreementDistance,
+        uint32 ageThreshold
     ) public {
+        // Check pegged asset mode arguments.
+        require(
+            (isPeggedAsset && peggedPrice != 0)
+                || (!isPeggedAsset && peggedPrice == 0)
+        );
+
+        // Check Uniswap pool arguments.
+        if (uniswapPool != address(0)) {
+            require(uniswapBaseToken != uniswapQuoteToken);
+            address token0 = IUniswapV3Pool(uniswapPool).token0();
+            address token1 = IUniswapV3Pool(uniswapPool).token1();
+            require(uniswapBaseToken == token0 || uniswapBaseToken == token1);
+            require(uniswapQuoteToken == token0 || uniswapQuoteToken == token1);
+            require(
+                uniswapBaseTokenDecimals == IERC20(uniswapBaseToken).decimals()
+            );
+            require(uniswapBaseTokenDecimals <= MAX_UNISWAP_BASE_DECIMALS);
+            require(uniswapLookback != uint32(0));
+
+            // Verify Uniswap TWAP is initialized.
+            // Specifically it is verified that the TWAP's oldest observation is
+            // older then the uniswapLookback argument.
+            uint32 oldestObservation =
+                OracleLibrary.getOldestObservationSecondsAgo(uniswapPool);
+            require(oldestObservation + uniswapLookback < block.timestamp);
+        } else {
+            require(uniswapPool == address(0));
+            require(uniswapBaseToken == address(0));
+            require(uniswapQuoteToken == address(0));
+            require(uniswapBaseTokenDecimals == uint8(0));
+            require(uniswapLookback == uint32(0));
+        }
+
+        // Check chainlink decimals.
+        require(IChainlinkAggregatorV3(chainlink).decimals() <= 18);
+
         // Create creation code with constructor arguments.
         bytes memory creationCode = abi.encodePacked(
             type(Aggor).creationCode,
             abi.encode(
-                initialAuthed, chronicle, chainlink, uniPool, uniUseToken0AsBase
+                initialAuthed,
+                isPeggedAsset,
+                peggedPrice,
+                chronicle,
+                chainlink,
+                uniswapPool,
+                uniswapBaseToken,
+                uniswapQuoteToken,
+                uniswapBaseTokenDecimals,
+                uniswapLookback,
+                agreementDistance,
+                ageThreshold
             )
         );
 
@@ -43,60 +105,34 @@ contract AggorScript is Script {
         address deployed = IGreenhouse(greenhouse).addressOf(salt);
         require(deployed.code.length == 0, "Salt already used");
 
+        // Plant creation code via greenhouse.
         vm.startBroadcast();
         IGreenhouse(greenhouse).plant(salt, creationCode);
         vm.stopBroadcast();
 
-        console2.log("Deployed at", deployed);
+        console.log("Deployed at", deployed);
     }
 
     // -- IAggor Functions --
 
-    /// @dev Pokes Aggor.
-    function poke(address self) public {
-        vm.startBroadcast();
-        IAggor(self).poke();
-        vm.stopBroadcast();
-
-        console2.log("Poked");
-    }
-
-    /// @dev Sets staleness threshold to `stalenessThreshold`.
-    function setStalenessThreshold(address self, uint32 stalenessThreshold)
+    /// @dev Updates the aggrement distance to `agreementDistance`.
+    function setAgreementDistance(address self, uint16 agreementDistance)
         public
     {
         vm.startBroadcast();
-        IAggor(self).setStalenessThreshold(stalenessThreshold);
+        IAggor(self).setAgreementDistance(agreementDistance);
         vm.stopBroadcast();
 
-        console2.log("Staleness Threshold set to", stalenessThreshold);
+        console.log("Updated agreement distance", agreementDistance);
     }
 
-    /// @dev Sets spread to `spread`.
-    function setSpread(address self, uint16 spread) public {
+    /// @dev Updates the age threshold to `ageThreshold`.
+    function setAgeThreshold(address self, uint32 ageThreshold) public {
         vm.startBroadcast();
-        IAggor(self).setSpread(spread);
+        IAggor(self).setAgeThreshold(ageThreshold);
         vm.stopBroadcast();
 
-        console2.log("Spread set to", spread);
-    }
-
-    /// @dev Sets whether to use Uniswap's TWAP oracle or not.
-    function useUniswap(address self, bool select) public {
-        vm.startBroadcast();
-        IAggor(self).useUniswap(select);
-        vm.stopBroadcast();
-
-        console2.log("Use Uniswap set to", select);
-    }
-
-    /// @dev Sets Uniswap TWAP's oracle lookback time in seconds.
-    function setUniSecondsAgo(address self, uint32 uniSecondsAgo) public {
-        vm.startBroadcast();
-        IAggor(self).setUniSecondsAgo(uniSecondsAgo);
-        vm.stopBroadcast();
-
-        console2.log("Uniswap Seconds Ago set to", uniSecondsAgo);
+        console.log("Updated age threshold", ageThreshold);
     }
 
     // -- IAuth Functions --
@@ -107,7 +143,7 @@ contract AggorScript is Script {
         IAuth(self).rely(who);
         vm.stopBroadcast();
 
-        console2.log("Relied", who);
+        console.log("Relied", who);
     }
 
     /// @dev Renounces auth from address `who`.
@@ -116,26 +152,6 @@ contract AggorScript is Script {
         IAuth(self).deny(who);
         vm.stopBroadcast();
 
-        console2.log("Denied", who);
-    }
-
-    // -- IToll Functions --
-
-    /// @dev Grants toll to address `who`.
-    function kiss(address self, address who) public {
-        vm.startBroadcast();
-        IToll(self).kiss(who);
-        vm.stopBroadcast();
-
-        console2.log("Kissed", who);
-    }
-
-    /// @dev Renounces toll from address `who`.
-    function diss(address self, address who) public {
-        vm.startBroadcast();
-        IToll(self).diss(who);
-        vm.stopBroadcast();
-
-        console2.log("Dissed", who);
+        console.log("Denied", who);
     }
 }

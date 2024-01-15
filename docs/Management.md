@@ -8,11 +8,8 @@ This document describes how to manage deployed `Aggor` instances.
   - [Table of Contents](#table-of-contents)
   - [Environment Variables](#environment-variables)
   - [Functions](#functions)
-    - [`IAggor::poke`](#iaggorpoke)
-    - [`IAggor::setStalenessThreshold`](#iaggorsetstalenessthreshold)
-    - [`IAggor::setSpread`](#iaggorsetspread)
-    - [`IAggor::useUniswap`](#iaggoruseuniswap)
-    - [`IAggor::setUniSecondsAgo`](#iaggorsetunisecondsago)
+    - [`IAggor::setAgreementDistance`](#iaggorsetagreementdistance)
+    - [`IAggor::setAgeThreshold`](#iaggorsetagethreshold)
     - [`IAuth::rely`](#iauthrely)
     - [`IAuth::deny`](#iauthdeny)
     - [`IToll::kiss`](#itollkiss)
@@ -36,7 +33,11 @@ $ env | grep -e "RPC_URL" -e "PRIVATE_KEY" -e "AGGOR"
 
 ## Functions
 
-## `IAggor::poke`
+## `IAggor::setAgreementDistance`
+
+Set the following environment variables:
+
+- `AGREEMENT_DISTANCE`: The agreement distance in BPS to set
 
 Run:
 
@@ -45,16 +46,16 @@ $ forge script \
     --private-key $PRIVATE_KEY \
     --broadcast \
     --rpc-url $RPC_URL \
-    --sig $(cast calldata "poke(address)" $AGGOR) \
+    --sig $(cast calldata "setAgreementDistance(address,uint16)" "$AGGOR" "$AGREEMENT_DISTANCE") \
     -vvv \
     script/Aggor.s.sol:AggorScript
 ```
 
-### `IAggor::setStalenessThreshold`
+### `IAggor::setAgeThreshold`
 
 Set the following environment variables:
 
-- `STALENESS_THRESHOLD`: The staleness threshold to set
+- `AGE_THRESHOLD`: The age threshold to set
 
 Run:
 
@@ -63,62 +64,7 @@ $ forge script \
     --private-key $PRIVATE_KEY \
     --broadcast \
     --rpc-url $RPC_URL \
-    --sig $(cast calldata "setStalenessThreshold(address,uint32)" $AGGOR $STALENESS_THRESHOLD) \
-    -vvv \
-    script/Aggor.s.sol:AggorScript
-```
-
-### `IAggor::setSpread`
-
-Set the following environment variables:
-
-- `SPREAD`: The spread to set
-
-Run:
-
-```bash
-$ forge script \
-    --private-key $PRIVATE_KEY \
-    --broadcast \
-    --rpc-url $RPC_URL \
-    --sig $(cast calldata "setSpread(address,uint16)" $AGGOR $SPREAD) \
-    -vvv \
-    script/Aggor.s.sol:AggorScript
-```
-
-### `IAggor::useUniswap`
-
-Set the following environment variables:
-
-- `USE_UNISWAP`: Whether to use Uniswap's TWAP or not
-    - Note that value must either `true` or `false`
-
-Run:
-
-```bash
-$ forge script \
-    --private-key $PRIVATE_KEY \
-    --broadcast \
-    --rpc-url $RPC_URL \
-    --sig $(cast calldata "useUniswap(address,bool)" $AGGOR $USE_UNISWAP) \
-    -vvv \
-    script/Aggor.s.sol:AggorScript
-```
-
-### `IAggor::setUniSecondsAgo`
-
-Set the following environment variables:
-
-- `UNI_SECONDS_AGO`: Lookback time in seconds for Uniswap's TWAP oracle
-
-Run:
-
-```bash
-$ forge script \
-    --private-key $PRIVATE_KEY \
-    --broadcast \
-    --rpc-url $RPC_URL \
-    --sig $(cast calldata "setUniSecondsAgo(address,uint32)" $AGGOR $UNI_SECONDS_AGO) \
+    --sig $(cast calldata "setAgeThreshold(address,uint32)" "$AGGOR" "$AGE_THRESHOLD") \
     -vvv \
     script/Aggor.s.sol:AggorScript
 ```

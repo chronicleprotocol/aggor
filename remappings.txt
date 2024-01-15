@@ -2,8 +2,6 @@ ds-test/=lib/forge-std/lib/ds-test/src/
 forge-std/=lib/forge-std/src/
 
 chronicle-std/=lib/chronicle-std/src/
-@script/chronicle-std/=lib/chronicle-std/script/
 
 greenhouse/=lib/greenhouse/src
 
-solmate/=lib/solmate/src/

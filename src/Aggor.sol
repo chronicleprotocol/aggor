@@ -1,22 +1,16 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.16;
 
-import {IERC20} from "forge-std/interfaces/IERC20.sol";
-
-import {IUniswapV3PoolImmutables} from
-    "uniswap/v3-core/contracts/interfaces/pool/IUniswapV3PoolImmutables.sol";
-
-import {IChronicle} from "chronicle-std/IChronicle.sol";
 import {Auth} from "chronicle-std/auth/Auth.sol";
 import {Toll} from "chronicle-std/toll/Toll.sol";
 
-import {LibCalc} from "./libs/LibCalc.sol";
-import {LibUniswapOracles} from "./libs/LibUniswapOracles.sol";
+import {IChronicle} from "chronicle-std/IChronicle.sol";
+import {IChainlinkAggregatorV3} from
+    "./interfaces/_external/IChainlinkAggregatorV3.sol";
 
 import {IAggor} from "./IAggor.sol";
 
-import {IChainlinkAggregatorV3} from
-    "./interfaces/_external/IChainlinkAggregatorV3.sol";
+import {LibUniswapOracles} from "./libs/LibUniswapOracles.sol";
 
 /**
  * @title Aggor
@@ -25,212 +19,263 @@ import {IChainlinkAggregatorV3} from
  *         value
  */
 contract Aggor is IAggor, Auth, Toll {
-    /// @dev Percentage scale is in basis points (BPS).
-    uint16 internal constant _pscale = 10_000;
+    using LibUniswapOracles for address;
+
+    // -- Internal Constants --
+
+    uint16 internal constant _BPS = 10_000;
+
+    uint8 internal constant _DECIMALS_CHRONICLE = 18;
+
+    // -- Immutable Configurations --
+
+    // -- Chainlink Compatibility
 
     /// @inheritdoc IAggor
-    uint32 public constant minUniSecondsAgo = 5 minutes;
+    uint8 public immutable decimals;
+
+    // -- Pegged Asset Mode
 
     /// @inheritdoc IAggor
-    uint8 public constant decimals = 18;
+    bool public immutable isPeggedAsset;
+    /// @inheritdoc IAggor
+    uint128 public immutable peggedPrice;
 
-    /// @inheritdoc IChronicle
-    bytes32 public immutable wat;
+    // -- Oracles
 
     /// @inheritdoc IAggor
     address public immutable chronicle;
-
     /// @inheritdoc IAggor
     address public immutable chainlink;
 
-    /// @inheritdoc IAggor
-    address public immutable uniPool;
+    // -- Twap
 
     /// @inheritdoc IAggor
-    address public immutable uniBasePair;
+    address public immutable uniswapPool;
+    /// @inheritdoc IAggor
+    address public immutable uniswapBaseToken;
+    /// @inheritdoc IAggor
+    address public immutable uniswapQuoteToken;
+    /// @inheritdoc IAggor
+    uint8 public immutable uniswapBaseTokenDecimals;
+    /// @inheritdoc IAggor
+    uint32 public immutable uniswapLookback;
+
+    // -- Mutable Configurations --
 
     /// @inheritdoc IAggor
-    address public immutable uniQuotePair;
-
+    uint16 public agreementDistance;
     /// @inheritdoc IAggor
-    uint8 public immutable uniBaseDec;
+    uint32 public ageThreshold;
 
-    /// @inheritdoc IAggor
-    uint8 public immutable uniQuoteDec;
+    // -- Constructor --
 
-    /// @inheritdoc IAggor
-    uint32 public uniSecondsAgo;
-
-    /// @inheritdoc IAggor
-    uint32 public stalenessThreshold;
-
-    /// @inheritdoc IAggor
-    uint16 public spread;
-
-    /// @inheritdoc IAggor
-    bool public uniswapSelected;
-
-    // This is the last agreed upon mean price.
-    uint128 private _val;
-    uint32 private _age;
-
-    /// @notice You only get once chance per deploy to setup Uniswap. If it
-    ///         will not be used, just pass in address(0) for uniPool_.
-    /// @param initialAuthed Address to be initially auth'ed
-    /// @param chronicle_ Address of Chronicle oracle
-    /// @param chainlink_ Address of Chainlink oracle
-    /// @param uniPool_ Address of Uniswap oracle (optional)
-    /// @param uniUseToken0AsBase If true, selects Pool.token0 as base pair, if not,
-    //         it uses Pool.token1 as the base pair.
     constructor(
         address initialAuthed,
+        bool isPeggedAsset_,
+        uint128 peggedPrice_,
         address chronicle_,
         address chainlink_,
-        address uniPool_,
-        bool uniUseToken0AsBase
+        address uniswapPool_,
+        address uniswapBaseToken_,
+        address uniswapQuoteToken_,
+        uint8 uniswapBaseTokenDecimals_,
+        uint32 uniswapLookback_,
+        uint16 agreementDistance_,
+        uint32 ageThreshold_
     ) Auth(initialAuthed) {
-        require(chronicle_ != address(0));
-        require(chainlink_ != address(0));
-
+        // Set immutables.
+        isPeggedAsset = isPeggedAsset_;
+        peggedPrice = peggedPrice_;
         chronicle = chronicle_;
         chainlink = chainlink_;
+        uniswapPool = uniswapPool_;
+        uniswapBaseToken = uniswapBaseToken_;
+        uniswapQuoteToken = uniswapQuoteToken_;
+        uniswapBaseTokenDecimals = uniswapBaseTokenDecimals_;
+        uniswapLookback = uniswapLookback_;
 
-        // Note that IChronicle::wat() is constant and save to cache.
-        wat = IChronicle(chronicle_).wat();
+        // Fetch chainlink's decimals and set as own.
+        decimals = IChainlinkAggregatorV3(chainlink_).decimals();
 
-        // Optionally initialize Uniswap.
-        address uniPoolInitializer;
-        address uniBasePairInitializer;
-        address uniQuotePairInitializer;
-        uint8 uniBaseDecInitializer;
-        uint8 uniQuoteDecInitializer;
-
-        if (uniPool_ != address(0)) {
-            uniPoolInitializer = uniPool_;
-
-            if (uniUseToken0AsBase) {
-                uniBasePairInitializer =
-                    IUniswapV3PoolImmutables(uniPoolInitializer).token0();
-                uniQuotePairInitializer =
-                    IUniswapV3PoolImmutables(uniPoolInitializer).token1();
-            } else {
-                uniBasePairInitializer =
-                    IUniswapV3PoolImmutables(uniPoolInitializer).token1();
-                uniQuotePairInitializer =
-                    IUniswapV3PoolImmutables(uniPoolInitializer).token0();
-            }
-
-            uniBaseDecInitializer = IERC20(uniBasePairInitializer).decimals();
-            uniQuoteDecInitializer = IERC20(uniQuotePairInitializer).decimals();
-        }
-
-        uniPool = uniPoolInitializer;
-        uniBasePair = uniBasePairInitializer;
-        uniQuotePair = uniQuotePairInitializer;
-        uniBaseDec = uniBaseDecInitializer;
-        uniQuoteDec = uniQuoteDecInitializer;
-
-        // Default config values
-        _setStalenessThreshold(1 days);
-        _setSpread(500); // 5%
-
-        if (uniPool != address(0)) {
-            _setUniSecondsAgo(5 minutes);
-        }
-    }
-
-    /// @inheritdoc IAggor
-    function poke() external {
-        _poke();
-    }
-
-    /// @dev Optimized function selector: 0x00000000.
-    ///      Note that this function is _not_ defined via the IAggor interface
-    ///      and one should _not_ depend on it.
-    function poke_optimized_3923566589() external {
-        _poke();
-    }
-
-    function _poke() internal {
-        bool ok;
-
-        // Read chronicle.
-        uint valChronicle;
-        (ok, valChronicle) = _tryReadChronicle();
-        if (!ok) {
-            revert OracleReadFailed(chronicle);
-        }
-        // assert(valChronicle != 0);
-        // assert(valChronicle <= type(uint128).max);
-
-        // Read second oracle, either Chainlink or Uniswap TWAP.
-        uint valOther;
-        if (!uniswapSelected) {
-            // Read Chainlink.
-            (ok, valOther) = _tryReadChainlink();
-            if (!ok) {
-                revert OracleReadFailed(chainlink);
-            }
-        } else {
-            // assert(uniPool != address(0));
-
-            // Read Uniswap.
-            (ok, valOther) = _tryReadUniswap();
-            if (!ok) {
-                revert OracleReadFailed(uniPool);
-            }
-        }
-        // assert(valOther != 0);
-        // assert(valOther <= type(uint128).max);
-
-        // Compute difference of oracle values.
-        uint diff =
-            LibCalc.pctDiff(uint128(valChronicle), uint128(valOther), _pscale);
-
-        if (diff > spread) {
-            // If difference is bigger than acceptable spread, let _val be the
-            // oracle's value with less difference to the current _val.
-            // forgefmt: disable-next-item
-            _val = LibCalc.distance(_val, valChronicle) < LibCalc.distance(_val, valOther)
-                ? uint128(valChronicle)
-                : uint128(valOther);
-        } else {
-            // If difference is within acceptable spread, let _val be the mean
-            // of the oracles' values.
-            // Note that unsafe computation is fine because both arguments are
-            // less than or equal to type(uint128).max.
-            _val = uint128(LibCalc.unsafeMean(valChronicle, valOther));
-        }
-        // assert(_val <= type(uint128).max);
-
-        // Update _val's age to current timestamp.
-        _age = uint32(block.timestamp);
+        // Set configurations.
+        _setAgreementDistance(agreementDistance_);
+        _setAgeThreshold(ageThreshold_);
     }
 
     // -- Read Functionality --
 
-    // -- IChronicle
+    /// @dev Returns Aggor's derived value, timestamp and status information.
+    ///
+    /// @dev Note that the value's age is always block.timestamp except if the
+    ///      value itself is invalid.
+    function _read() internal view returns (uint128, uint, Status memory) {
+        // Read chronicle and chainlink oracles.
+        (bool ok_chr, uint128 val_chr) = _readChronicle();
+        (bool ok_chl, uint128 val_chl) = _readChainlink();
 
-    /// @inheritdoc IChronicle
-    function read() external view toll returns (uint) {
-        require(_val != 0);
-        return _val;
+        // Dispatch following cases:
+        // - Both oracles ok
+        // - Only chronicle ok
+        // - Only chainlink ok
+        if (ok_chr && ok_chl) {
+            // If both oracles ok and in agreement distance, return their median.
+            if (_inAgreementDistance(val_chr, val_chl)) {
+                return (
+                    _median(val_chr, val_chl),
+                    block.timestamp,
+                    Status({
+                        path: 2,
+                        goodOracleCtr: 2,
+                        badOracleCtr: 0,
+                        tieBreakerUsed: false
+                    })
+                );
+            }
+
+            // If both oracles ok but not in agreement distance, try to derive
+            // value via tie breaker.
+            (bool ok, uint128 val) = _tryTieBreaker(val_chr, val_chl);
+            if (ok) {
+                return (
+                    val,
+                    block.timestamp,
+                    Status({
+                        path: 3,
+                        goodOracleCtr: 2,
+                        badOracleCtr: 0,
+                        tieBreakerUsed: true
+                    })
+                );
+            }
+
+            // Otherwise not possible to decide which oracle is ok.
+        } else if (ok_chr) {
+            // If only chronicle ok, use chronicle's value.
+            return (
+                val_chr,
+                block.timestamp,
+                Status({
+                    path: 4,
+                    goodOracleCtr: 1,
+                    badOracleCtr: 1,
+                    tieBreakerUsed: false
+                })
+            );
+        } else if (ok_chl) {
+            // If only chainlink ok, use chainlink's value.
+            return (
+                val_chl,
+                block.timestamp,
+                Status({
+                    path: 4,
+                    goodOracleCtr: 1,
+                    badOracleCtr: 1,
+                    tieBreakerUsed: false
+                })
+            );
+        }
+
+        // If no oracle ok try to use twap.
+        if (uniswapPool != address(0)) {
+            (bool ok, uint128 twap) = _readTwap();
+            if (ok) {
+                return (
+                    twap,
+                    block.timestamp,
+                    Status({
+                        path: 5,
+                        goodOracleCtr: 0,
+                        badOracleCtr: 2,
+                        tieBreakerUsed: true
+                    })
+                );
+            }
+        }
+
+        // Otherwise no value derivation possible.
+        return (
+            0,
+            0,
+            Status({
+                path: 6,
+                goodOracleCtr: 0,
+                badOracleCtr: 2,
+                tieBreakerUsed: false
+            })
+        );
     }
 
-    /// @inheritdoc IChronicle
-    function tryRead() external view toll returns (bool, uint) {
-        return (_val != 0, _val);
+    /// @dev Reads the chronicle oracle.
+    ///
+    /// @dev Note that while chronicle uses 18 decimals, the returned value is
+    ///      already scaled to `decimals`.
+    ///
+    /// @return bool Whether oracle is ok.
+    /// @return uint128 The oracle's val.
+    function _readChronicle() internal view returns (bool, uint128) {
+        (bool ok, uint val, uint age) = IChronicle(chronicle).tryReadWithAge();
+        // assert(val <= type(uint128).max);
+        // assert(!ok || val != 0); // ok -> val != 0
+        // assert(age <= block.timestamp);
+
+        // Fail if not ok or value stale.
+        if (!ok || age + ageThreshold < block.timestamp) {
+            return (false, 0);
+        }
+
+        // Scale value down from chronicle decimals to aggor decimals.
+        // assert(_DECIMALS_CHRONICLES >= decimals).
+        val /= 10 ** (_DECIMALS_CHRONICLE - decimals);
+
+        return (true, uint128(val));
     }
 
-    /// @inheritdoc IChronicle
-    function readWithAge() external view toll returns (uint, uint) {
-        require(_val != 0);
-        return (_val, _age);
+    /// @dev Reads the chainlink oracle.
+    ///
+    /// @return bool Whether oracle is ok.
+    /// @return uint128 The oracle's val.
+    function _readChainlink() internal view returns (bool, uint128) {
+        // forgefmt: disable-next-item
+        (
+            /*uint80 roundId*/,
+            int answer,
+            /*uint startedAt*/,
+            uint updatedAt,
+            /*uint80 answeredInRound*/
+        ) = IChainlinkAggregatorV3(chainlink).latestRoundData();
+        // assert(updatedAt <= block.timestamp);
+
+        // Fail if answer not in [1, type(uint128).max] or answer stale.
+        if (
+            (answer <= 0 || uint(answer) > uint(type(uint128).max))
+                || updatedAt + ageThreshold < block.timestamp
+        ) {
+            return (false, 0);
+        }
+
+        // Otherwise ok.
+        return (true, uint128(uint(answer)));
     }
 
-    /// @inheritdoc IChronicle
-    function tryReadWithAge() external view toll returns (bool, uint, uint) {
-        return (_val != 0, _val, _age);
+    /// @dev Reads the twap oracle.
+    ///
+    /// @return bool Whether twap is ok.
+    /// @return uint128 The twap's val.
+    function _readTwap() internal view returns (bool, uint128) {
+        // Read twap.
+        uint twap = uniswapPool._readOracle(
+            uniswapBaseToken,
+            uniswapQuoteToken,
+            uniswapBaseTokenDecimals,
+            uniswapLookback
+        );
+
+        if (twap <= type(uint128).max) {
+            return (true, uint128(twap));
+        } else {
+            return (false, 0);
+        }
     }
 
     // -- IChainlinkAggregatorV3
@@ -249,169 +294,164 @@ contract Aggor is IAggor, Auth, Toll {
             uint80 answeredInRound
         )
     {
+        (uint128 val, uint age, /*status*/ ) = _read();
+
         roundId = 1;
-        answer = _toInt(_val);
-        // assert(uint(answer) == uint(_val));
+        answer = int(uint(val));
         startedAt = 0;
-        updatedAt = _age;
-        answeredInRound = roundId;
+        updatedAt = age;
+        answeredInRound = 1; // = roundId
     }
 
     /// @inheritdoc IAggor
     function latestAnswer() external view toll returns (int) {
-        return _toInt(_val);
+        (uint128 val, /*age*/, /*status*/ ) = _read();
+
+        return int(uint(val));
+    }
+
+    // -- IAggor
+
+    /// @inheritdoc IAggor
+    function readWithStatus()
+        external
+        view
+        toll
+        returns (uint, uint, Status memory)
+    {
+        return _read();
     }
 
     // -- Auth'ed Functionality --
 
     /// @inheritdoc IAggor
-    function setStalenessThreshold(uint32 stalenessThreshold_) external auth {
-        _setStalenessThreshold(stalenessThreshold_);
+    function setAgreementDistance(uint16 agreementDistance_) external auth {
+        _setAgreementDistance(agreementDistance_);
     }
 
-    function _setStalenessThreshold(uint32 stalenessThreshold_) internal {
-        require(stalenessThreshold_ != 0);
+    function _setAgreementDistance(uint16 agreementDistance_) internal {
+        require(agreementDistance_ != 0);
+        require(agreementDistance_ <= _BPS);
 
-        if (stalenessThreshold != stalenessThreshold_) {
-            emit StalenessThresholdUpdated(
-                msg.sender, stalenessThreshold, stalenessThreshold_
+        if (agreementDistance != agreementDistance_) {
+            emit AgreementDistanceUpdated(
+                msg.sender, agreementDistance, agreementDistance_
             );
-            stalenessThreshold = stalenessThreshold_;
+            agreementDistance = agreementDistance_;
         }
     }
 
     /// @inheritdoc IAggor
-    function setSpread(uint16 spread_) external auth {
-        _setSpread(spread_);
+    function setAgeThreshold(uint32 ageThreshold_) external auth {
+        _setAgeThreshold(ageThreshold_);
     }
 
-    function _setSpread(uint16 spread_) internal {
-        require(spread_ <= _pscale);
+    function _setAgeThreshold(uint32 ageThreshold_) internal {
+        require(ageThreshold_ != 0);
 
-        if (spread != spread_) {
-            emit SpreadUpdated(msg.sender, spread, spread_);
-            spread = spread_;
-        }
-    }
-
-    /// @inheritdoc IAggor
-    function useUniswap(bool selected) external auth {
-        // Uniswap pool must be configured
-        require(uniPool != address(0));
-
-        // Revert unless there is something to change
-        require(uniswapSelected != selected);
-
-        emit UniswapSelectedUpdated({
-            caller: msg.sender,
-            oldValue: uniswapSelected,
-            newValue: selected
-        });
-
-        uniswapSelected = selected;
-    }
-
-    /// @inheritdoc IAggor
-    function setUniSecondsAgo(uint32 uniSecondsAgo_) external auth {
-        _setUniSecondsAgo(uniSecondsAgo_);
-    }
-
-    function _setUniSecondsAgo(uint32 uniSecondsAgo_) internal {
-        // Uniswap is optional, make sure it's configured
-        require(uniPool != address(0));
-        require(uniSecondsAgo_ >= minUniSecondsAgo);
-
-        if (uniSecondsAgo != uniSecondsAgo_) {
-            emit UniswapSecondsAgoUpdated(
-                msg.sender, uniSecondsAgo, uniSecondsAgo_
+        if (ageThreshold != ageThreshold_) {
+            emit AcceptableAgeThresholdUpdated(
+                msg.sender, ageThreshold, ageThreshold_
             );
-            uniSecondsAgo = uniSecondsAgo_;
+            ageThreshold = ageThreshold_;
         }
-
-        // Ensure that the pool works within the desired "lookback" period.
-        (bool ok,) = _tryReadUniswap();
-        require(ok);
     }
 
-    // -- Private Helpers --
+    // -- Internal Helpers --
 
-    function _tryReadUniswap() internal view returns (bool, uint) {
-        // assert(uniPool != address(0));
-
-        uint val = LibUniswapOracles.readOracle(
-            uniPool, uniBasePair, uniQuotePair, uniBaseDec, uniSecondsAgo
-        );
-
-        // We always scale to 'decimals', up OR down.
-        if (uniQuoteDec != decimals) {
-            val = LibCalc.scale(val, uniQuoteDec, decimals);
+    /// @dev Tries to return a value based on `a`, `b` and a tie breaker.
+    ///
+    /// @return bool Whether value is ok.
+    /// @return uint128 Value dervied via tie breaker.
+    function _tryTieBreaker(uint128 a, uint128 b)
+        internal
+        view
+        returns (bool, uint128)
+    {
+        // Use pegged price heuristic if in pegged asset mode.
+        if (isPeggedAsset) {
+            if (a < peggedPrice) {
+                if (b < peggedPrice) {
+                    // [_, _, p] => val = _max(a, b)
+                    return (true, _max(a, b));
+                } else {
+                    // [_, p, _] => val = p
+                    return (true, peggedPrice);
+                }
+            } else {
+                if (b < peggedPrice) {
+                    // [_, p, _] => val = p
+                    return (true, peggedPrice);
+                } else {
+                    // [p, _, _] => val = _min(a, b)
+                    return (true, _min(a, b));
+                }
+            }
         }
 
-        // Fail if value is zero.
-        if (val == 0) {
-            return (false, 0);
+        // Otherwise try to use twap.
+        if (uniswapPool != address(0)) {
+            (bool ok, uint128 twap) = _readTwap();
+            if (ok) {
+                if (a < twap) {
+                    if (b < twap) {
+                        // [_, _, twap] => val = _max(a, b)
+                        return (true, _max(a, b));
+                    } else {
+                        // [_, twap, _] => val = twap
+                        return (true, twap);
+                    }
+                } else {
+                    if (b < twap) {
+                        // [_, twap, _] => val = twap
+                        return (true, twap);
+                    } else {
+                        // [twap, _, _] => val = _min(a, b)
+                        return (true, _min(a, b));
+                    }
+                }
+            }
         }
 
-        // Also fail if could cause overflow.
-        if (val > type(uint128).max) {
-            return (false, 0);
-        }
-
-        return (true, val);
+        // Otherwise no tie breaker possible.
+        return (false, 0);
     }
 
-    function _tryReadChronicle() internal view returns (bool, uint) {
-        bool ok;
-        uint val;
-        uint age;
-        (ok, val, age) = IChronicle(chronicle).tryReadWithAge();
-        // assert(!ok || val != 0);
+    function _inAgreementDistance(uint128 a, uint128 b)
+        internal
+        view
+        returns (bool)
+    {
+        // Difference is 0% if both values are equal.
+        if (a == b) return true;
 
-        // Fail if value stale.
-        uint diff = block.timestamp - age;
-        if (diff > stalenessThreshold) {
-            return (false, 0);
-        }
+        // Otherwise compute %-difference in basis points.
+        uint diff = a > b
+            ? _BPS - (((uint(b) * 1e18) / uint(a)) * _BPS / 1e18)
+            : _BPS - (((uint(a) * 1e18) / uint(b)) * _BPS / 1e18);
 
-        return (ok, val);
+        // And return whether %-difference inside acceptable agreement distance.
+        return diff <= agreementDistance;
     }
 
-    function _tryReadChainlink() internal view returns (bool, uint) {
-        int answer;
-        uint updatedAt;
-        (, answer,, updatedAt,) =
-            IChainlinkAggregatorV3(chainlink).latestRoundData();
-
-        // Fail if value stale.
-        uint diff = block.timestamp - updatedAt;
-        if (diff > stalenessThreshold) {
-            return (false, 0);
+    function _median(uint128 a, uint128 b) internal pure returns (uint128) {
+        // Note to cast arguments to uint to avoid overflow possibilites.
+        uint sum;
+        unchecked {
+            sum = uint(a) + uint(b);
         }
+        // assert(sum <= 2 * type(uint128).max);
 
-        // Fail if value negative.
-        if (answer < 0) {
-            return (false, 0);
-        }
-
-        // Adjust decimals, if necessary.
-        uint val = uint(answer);
-        uint decimals_ = IChainlinkAggregatorV3(chainlink).decimals();
-        if (decimals_ != decimals) {
-            val = LibCalc.scale(val, decimals_, decimals);
-        }
-
-        // Fail if value is zero.
-        if (val == 0) {
-            return (false, 0);
-        }
-
-        // Otherwise value is ok.
-        return (true, val);
+        // Note that >> 1 equals a divison by 2.
+        return uint128(sum >> 1);
     }
 
-    function _toInt(uint128 val) private pure returns (int) {
-        // Note that int(type(uint128).max) == type(uint128).max.
-        return int(uint(val));
+    function _max(uint128 a, uint128 b) internal pure returns (uint128) {
+        return a > b ? a : b;
+    }
+
+    function _min(uint128 a, uint128 b) internal pure returns (uint128) {
+        return a < b ? a : b;
     }
 
     // -- Overridden Toll Functions --
@@ -425,15 +465,35 @@ contract Aggor is IAggor, Auth, Toll {
  *
  *      For more info, see docs/Deployment.md.
  */
-contract Aggor_COUNTER is Aggor {
-    // @todo   ^^^^^^^ Adjust name of Aggor instance
+contract Aggor_BASE_QUOTE_COUNTER is Aggor {
+    // @todo   ^^^^ ^^^^^ ^^^^^^^ Adjust name of Aggor instance
     constructor(
         address initialAuthed,
+        bool isPeggedAsset_,
+        uint128 peggedPrice_,
         address chronicle_,
         address chainlink_,
-        address uniPool_,
-        bool uniUseToken0AsBase
+        address uniswapPool_,
+        address uniswapBaseToken_,
+        address uniswapQuoteToken_,
+        uint8 uniswapBaseDec_,
+        uint32 uniswapLookback_,
+        uint16 agreementDistance_,
+        uint32 ageThreshold_
     )
-        Aggor(initialAuthed, chronicle_, chainlink_, uniPool_, uniUseToken0AsBase)
+        Aggor(
+            initialAuthed,
+            isPeggedAsset_,
+            peggedPrice_,
+            chronicle_,
+            chainlink_,
+            uniswapPool_,
+            uniswapBaseToken_,
+            uniswapQuoteToken_,
+            uniswapBaseDec_,
+            uniswapLookback_,
+            agreementDistance_,
+            ageThreshold_
+        )
     {}
 }
