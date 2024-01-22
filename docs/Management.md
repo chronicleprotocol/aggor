@@ -37,7 +37,7 @@ $ env | grep -e "RPC_URL" -e "PRIVATE_KEY" -e "AGGOR"
 
 Set the following environment variables:
 
-- `AGREEMENT_DISTANCE`: The agreement distance in BPS to set
+- `AGREEMENT_DISTANCE`: The agreement distance in WAD to set
 
 Run:
 
@@ -46,7 +46,7 @@ $ forge script \
     --private-key $PRIVATE_KEY \
     --broadcast \
     --rpc-url $RPC_URL \
-    --sig $(cast calldata "setAgreementDistance(address,uint16)" "$AGGOR" "$AGREEMENT_DISTANCE") \
+    --sig $(cast calldata "setAgreementDistance(address,uint128)" "$AGGOR" "$AGREEMENT_DISTANCE") \
     -vvv \
     script/Aggor.s.sol:AggorScript
 ```

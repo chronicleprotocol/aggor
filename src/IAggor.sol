@@ -6,14 +6,9 @@ interface IAggor {
     /// @custom:field path The path identifier.
     /// @custom:field goodOracleCtr The number of oracles used to derive the
     ///                             value.
-    /// @custom:field badOracleCtr The number of oracles failed to deliver
-    ///                            a usable value.
-    /// @custom:field tieBreakerUsed Whether a tie breaker was used.
     struct Status {
         uint path;
         uint goodOracleCtr;
-        uint badOracleCtr;
-        bool tieBreakerUsed;
     }
 
     /// @notice Emitted when agreement distance is updated.
@@ -77,16 +72,6 @@ interface IAggor {
 
     // -- Immutable Configurations --
 
-    // -- Pegged Asset Mode
-
-    /// @notice Returns whether Aggor is in pegged asset mode.
-    /// @return isPeggedAsset Whether the asset pair is pegged or not.
-    function isPeggedAsset() external view returns (bool isPeggedAsset);
-
-    /// @notice Returns the price used as tie breaker when in asset mode.
-    /// @return peggedPrice The price used as tie breaker.
-    function peggedPrice() external view returns (uint128 peggedPrice);
-
     // -- Oracles
 
     /// @notice Returns the Chronicle oracle.
@@ -125,13 +110,13 @@ interface IAggor {
 
     // -- Mutable Configurations --
 
-    /// @notice Returns the agreement distance in BPS used to determine whether
+    /// @notice Returns the agreement distance in WAD used to determine whether
     ///         a set of oracle values are in agreement.
     /// @return agreementDistance The agreement distance.
     function agreementDistance()
         external
         view
-        returns (uint16 agreementDistance);
+        returns (uint128 agreementDistance);
 
     /// @notice The acceptable age of price that will be allowed.
     /// @return ageThreshold The time in seconds where a price is considered
@@ -142,7 +127,7 @@ interface IAggor {
 
     /// @notice Sets the agreement distance.
     /// @dev Only callable by auth'ed addresses.
-    function setAgreementDistance(uint16 agreementDistance) external;
+    function setAgreementDistance(uint128 agreementDistance) external;
 
     /// @notice Sets the age threshold.
     /// @dev Only callable by auth'ed addresses.

@@ -1,5 +1,0 @@
-AggorIntegrationTest_eth_ETH_USD:test_ChronicleNotOk_ChainlinkNotOk() (gas: 276)
-AggorIntegrationTest_eth_ETH_USD:test_ChronicleNotOk_ChainlinkOk() (gas: 40676)
-AggorIntegrationTest_eth_ETH_USD:test_ChronicleOk_ChainlinkNotOk() (gas: 40737)
-AggorIntegrationTest_eth_ETH_USD:test_ChronicleOk_ChainlinkOk_InAgreementDistance() (gas: 39685)
-AggorIntegrationTest_eth_ETH_USD:test_ChronicleOk_ChainlinkOk_NotInAgreementDistance() (gas: 14339)

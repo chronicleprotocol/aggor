@@ -27,68 +27,34 @@ contract AggorScript is Script {
     /// @dev The maximum number of decimals for Uniswap's base asset supported.
     uint internal constant MAX_UNISWAP_BASE_DECIMALS = 38;
 
+    // -- Deployment Configuration --
+
+    // -- Immutable
+
+    address chronicle;
+    address chainlink;
+    address uniswapPool;
+    address uniswapBaseToken;
+    address uniswapQuoteToken;
+    uint8 uniswapBaseTokenDecimals;
+    uint32 uniswapLookback;
+
+    // -- Mutable
+
+    uint128 agreementDistance;
+    uint32 ageThreshold;
+
     /// @dev Deploys a new Aggor instance via Greenhouse instance
     ///      `greenhouse` and salt `salt` with `initialAuthed` being the
     ///      address initially auth'ed.
-    function deploy(
-        address greenhouse,
-        bytes32 salt,
-        address initialAuthed,
-        bool isPeggedAsset,
-        uint128 peggedPrice,
-        address chronicle,
-        address chainlink,
-        address uniswapPool,
-        address uniswapBaseToken,
-        address uniswapQuoteToken,
-        uint8 uniswapBaseTokenDecimals,
-        uint32 uniswapLookback,
-        uint16 agreementDistance,
-        uint32 ageThreshold
-    ) public {
-        // Check pegged asset mode arguments.
-        require(
-            (isPeggedAsset && peggedPrice != 0)
-                || (!isPeggedAsset && peggedPrice == 0)
-        );
-
-        // Check Uniswap pool arguments.
-        if (uniswapPool != address(0)) {
-            require(uniswapBaseToken != uniswapQuoteToken);
-            address token0 = IUniswapV3Pool(uniswapPool).token0();
-            address token1 = IUniswapV3Pool(uniswapPool).token1();
-            require(uniswapBaseToken == token0 || uniswapBaseToken == token1);
-            require(uniswapQuoteToken == token0 || uniswapQuoteToken == token1);
-            require(
-                uniswapBaseTokenDecimals == IERC20(uniswapBaseToken).decimals()
-            );
-            require(uniswapBaseTokenDecimals <= MAX_UNISWAP_BASE_DECIMALS);
-            require(uniswapLookback != uint32(0));
-
-            // Verify Uniswap TWAP is initialized.
-            // Specifically it is verified that the TWAP's oldest observation is
-            // older then the uniswapLookback argument.
-            uint32 oldestObservation =
-                OracleLibrary.getOldestObservationSecondsAgo(uniswapPool);
-            require(oldestObservation + uniswapLookback < block.timestamp);
-        } else {
-            require(uniswapPool == address(0));
-            require(uniswapBaseToken == address(0));
-            require(uniswapQuoteToken == address(0));
-            require(uniswapBaseTokenDecimals == uint8(0));
-            require(uniswapLookback == uint32(0));
-        }
-
-        // Check chainlink decimals.
-        require(IChainlinkAggregatorV3(chainlink).decimals() <= 18);
-
+    function deploy(address greenhouse, bytes32 salt, address initialAuthed)
+        public
+    {
         // Create creation code with constructor arguments.
         bytes memory creationCode = abi.encodePacked(
             type(Aggor).creationCode,
             abi.encode(
                 initialAuthed,
-                isPeggedAsset,
-                peggedPrice,
                 chronicle,
                 chainlink,
                 uniswapPool,
@@ -115,24 +81,24 @@ contract AggorScript is Script {
 
     // -- IAggor Functions --
 
-    /// @dev Updates the aggrement distance to `agreementDistance`.
-    function setAgreementDistance(address self, uint16 agreementDistance)
+    /// @dev Updates the aggrement distance to `agreementDistance_`.
+    function setAgreementDistance(address self, uint128 agreementDistance_)
         public
     {
         vm.startBroadcast();
-        IAggor(self).setAgreementDistance(agreementDistance);
+        IAggor(self).setAgreementDistance(agreementDistance_);
         vm.stopBroadcast();
 
-        console.log("Updated agreement distance", agreementDistance);
+        console.log("Updated agreement distance", agreementDistance_);
     }
 
-    /// @dev Updates the age threshold to `ageThreshold`.
-    function setAgeThreshold(address self, uint32 ageThreshold) public {
+    /// @dev Updates the age threshold to `ageThreshold_`.
+    function setAgeThreshold(address self, uint32 ageThreshold_) public {
         vm.startBroadcast();
-        IAggor(self).setAgeThreshold(ageThreshold);
+        IAggor(self).setAgeThreshold(ageThreshold_);
         vm.stopBroadcast();
 
-        console.log("Updated age threshold", ageThreshold);
+        console.log("Updated age threshold", ageThreshold_);
     }
 
     // -- IAuth Functions --
