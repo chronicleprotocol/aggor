@@ -8,9 +8,14 @@ import {IChronicle} from "chronicle-std/IChronicle.sol";
 import {IChainlinkAggregatorV3} from
     "./interfaces/_external/IChainlinkAggregatorV3.sol";
 
+import {IERC20} from "forge-std/interfaces/IERC20.sol";
+import {IUniswapV3Pool} from
+    "uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
+
 import {IAggor} from "./IAggor.sol";
 
 import {LibUniswapOracles} from "./libs/LibUniswapOracles.sol";
+import {LibMedian} from "./libs/LibMedian.sol";
 
 /**
  * @title Aggor
@@ -23,7 +28,8 @@ contract Aggor is IAggor, Auth, Toll {
 
     // -- Internal Constants --
 
-    uint16 internal constant _BPS = 10_000;
+    /// @dev The maximum number of decimals for Uniswap's base asset supported.
+    uint internal constant _MAX_UNISWAP_BASE_DECIMALS = 38;
 
     uint8 internal constant _DECIMALS_CHRONICLE = 18;
 
@@ -32,39 +38,32 @@ contract Aggor is IAggor, Auth, Toll {
     // -- Chainlink Compatibility
 
     /// @inheritdoc IAggor
-    uint8 public immutable decimals;
-
-    // -- Pegged Asset Mode
-
-    /// @inheritdoc IAggor
-    bool public immutable isPeggedAsset;
-    /// @inheritdoc IAggor
-    uint128 public immutable peggedPrice;
+    uint8 public constant decimals = 8;
 
     // -- Oracles
 
     /// @inheritdoc IAggor
-    address public immutable chronicle;
+    address public chronicle;
     /// @inheritdoc IAggor
-    address public immutable chainlink;
+    address public chainlink;
 
     // -- Twap
 
     /// @inheritdoc IAggor
-    address public immutable uniswapPool;
+    address public uniswapPool;
     /// @inheritdoc IAggor
-    address public immutable uniswapBaseToken;
+    address public uniswapBaseToken;
     /// @inheritdoc IAggor
-    address public immutable uniswapQuoteToken;
+    address public uniswapQuoteToken;
     /// @inheritdoc IAggor
-    uint8 public immutable uniswapBaseTokenDecimals;
+    uint8 public uniswapBaseTokenDecimals;
     /// @inheritdoc IAggor
-    uint32 public immutable uniswapLookback;
+    uint32 public uniswapLookback;
 
     // -- Mutable Configurations --
 
     /// @inheritdoc IAggor
-    uint16 public agreementDistance;
+    uint128 public agreementDistance;
     /// @inheritdoc IAggor
     uint32 public ageThreshold;
 
@@ -72,8 +71,6 @@ contract Aggor is IAggor, Auth, Toll {
 
     constructor(
         address initialAuthed,
-        bool isPeggedAsset_,
-        uint128 peggedPrice_,
         address chronicle_,
         address chainlink_,
         address uniswapPool_,
@@ -81,12 +78,19 @@ contract Aggor is IAggor, Auth, Toll {
         address uniswapQuoteToken_,
         uint8 uniswapBaseTokenDecimals_,
         uint32 uniswapLookback_,
-        uint16 agreementDistance_,
+        uint128 agreementDistance_,
         uint32 ageThreshold_
     ) Auth(initialAuthed) {
+        // Verify twap config arguments.
+        _verifyTwapConfig(
+            uniswapPool_,
+            uniswapBaseToken_,
+            uniswapQuoteToken_,
+            uniswapBaseTokenDecimals_,
+            uniswapLookback_
+        );
+
         // Set immutables.
-        isPeggedAsset = isPeggedAsset_;
-        peggedPrice = peggedPrice_;
         chronicle = chronicle_;
         chainlink = chainlink_;
         uniswapPool = uniswapPool_;
@@ -95,12 +99,39 @@ contract Aggor is IAggor, Auth, Toll {
         uniswapBaseTokenDecimals = uniswapBaseTokenDecimals_;
         uniswapLookback = uniswapLookback_;
 
-        // Fetch chainlink's decimals and set as own.
-        decimals = IChainlinkAggregatorV3(chainlink_).decimals();
-
         // Set configurations.
         _setAgreementDistance(agreementDistance_);
         _setAgeThreshold(ageThreshold_);
+    }
+
+    function _verifyTwapConfig(
+        address uniswapPool_,
+        address uniswapBaseToken_,
+        address uniswapQuoteToken_,
+        uint8 uniswapBaseTokenDecimals_,
+        uint32 uniswapLookback_
+    ) internal view {
+        require(uniswapPool_ != address(0));
+
+        address token0 = IUniswapV3Pool(uniswapPool_).token0();
+        address token1 = IUniswapV3Pool(uniswapPool_).token1();
+
+        // Verify base and quote tokens.
+        require(uniswapBaseToken_ != uniswapQuoteToken_);
+        require(uniswapBaseToken_ == token0 || uniswapBaseToken_ == token1);
+        require(uniswapQuoteToken_ == token0 || uniswapQuoteToken_ == token1);
+
+        // Verify base token's decimals.
+        require(
+            uniswapBaseTokenDecimals_ == IERC20(uniswapBaseToken_).decimals()
+        );
+        require(uniswapBaseTokenDecimals_ <= _MAX_UNISWAP_BASE_DECIMALS);
+
+        // Verify TWAP is initialized.
+        // Specifically, verify that the TWAP's oldest observation is older
+        // then the uniswapLookback argument.
+        uint32 oldestObservation = uniswapPool_.getOldestObservationSecondsAgo();
+        require(oldestObservation > uniswapLookback_);
     }
 
     // -- Read Functionality --
@@ -114,96 +145,44 @@ contract Aggor is IAggor, Auth, Toll {
         (bool ok_chr, uint128 val_chr) = _readChronicle();
         (bool ok_chl, uint128 val_chl) = _readChainlink();
 
-        // Dispatch following cases:
-        // - Both oracles ok
-        // - Only chronicle ok
-        // - Only chainlink ok
         if (ok_chr && ok_chl) {
             // If both oracles ok and in agreement distance, return their median.
             if (_inAgreementDistance(val_chr, val_chl)) {
                 return (
-                    _median(val_chr, val_chl),
+                    LibMedian.median(val_chr, val_chl),
                     block.timestamp,
-                    Status({
-                        path: 2,
-                        goodOracleCtr: 2,
-                        badOracleCtr: 0,
-                        tieBreakerUsed: false
-                    })
+                    Status({path: 2, goodOracleCtr: 2})
                 );
             }
 
-            // If both oracles ok but not in agreement distance, try to derive
-            // value via tie breaker.
-            (bool ok, uint128 val) = _tryTieBreaker(val_chr, val_chl);
-            if (ok) {
-                return (
-                    val,
-                    block.timestamp,
-                    Status({
-                        path: 3,
-                        goodOracleCtr: 2,
-                        badOracleCtr: 0,
-                        tieBreakerUsed: true
-                    })
-                );
+            // If both oracles ok but not in agreement distance, derive value
+            // using TWAP as tie breaker.
+            (bool ok_twap, uint128 val_twap) = _readTwap();
+            if (ok_twap) {
+                uint128 val = LibMedian.median(val_chr, val_chl, val_twap);
+                return
+                    (val, block.timestamp, Status({path: 3, goodOracleCtr: 2}));
             }
 
             // Otherwise not possible to decide which oracle is ok.
         } else if (ok_chr) {
             // If only chronicle ok, use chronicle's value.
-            return (
-                val_chr,
-                block.timestamp,
-                Status({
-                    path: 4,
-                    goodOracleCtr: 1,
-                    badOracleCtr: 1,
-                    tieBreakerUsed: false
-                })
-            );
+            return
+                (val_chr, block.timestamp, Status({path: 4, goodOracleCtr: 1}));
         } else if (ok_chl) {
             // If only chainlink ok, use chainlink's value.
-            return (
-                val_chl,
-                block.timestamp,
-                Status({
-                    path: 4,
-                    goodOracleCtr: 1,
-                    badOracleCtr: 1,
-                    tieBreakerUsed: false
-                })
-            );
+            return
+                (val_chl, block.timestamp, Status({path: 4, goodOracleCtr: 1}));
         }
 
-        // If no oracle ok try to use twap.
-        if (uniswapPool != address(0)) {
-            (bool ok, uint128 twap) = _readTwap();
-            if (ok) {
-                return (
-                    twap,
-                    block.timestamp,
-                    Status({
-                        path: 5,
-                        goodOracleCtr: 0,
-                        badOracleCtr: 2,
-                        tieBreakerUsed: true
-                    })
-                );
-            }
+        // If no oracle ok use TWAP.
+        (bool ok, uint128 twap) = _readTwap();
+        if (ok) {
+            return (twap, block.timestamp, Status({path: 5, goodOracleCtr: 0}));
         }
 
         // Otherwise no value derivation possible.
-        return (
-            0,
-            0,
-            Status({
-                path: 6,
-                goodOracleCtr: 0,
-                badOracleCtr: 2,
-                tieBreakerUsed: false
-            })
-        );
+        return (0, 0, Status({path: 6, goodOracleCtr: 0}));
     }
 
     /// @dev Reads the chronicle oracle.
@@ -264,7 +243,7 @@ contract Aggor is IAggor, Auth, Toll {
     /// @return uint128 The twap's val.
     function _readTwap() internal view returns (bool, uint128) {
         // Read twap.
-        uint twap = uniswapPool._readOracle(
+        uint twap = uniswapPool.readOracle(
             uniswapBaseToken,
             uniswapQuoteToken,
             uniswapBaseTokenDecimals,
@@ -325,13 +304,13 @@ contract Aggor is IAggor, Auth, Toll {
     // -- Auth'ed Functionality --
 
     /// @inheritdoc IAggor
-    function setAgreementDistance(uint16 agreementDistance_) external auth {
+    function setAgreementDistance(uint128 agreementDistance_) external auth {
         _setAgreementDistance(agreementDistance_);
     }
 
-    function _setAgreementDistance(uint16 agreementDistance_) internal {
+    function _setAgreementDistance(uint128 agreementDistance_) internal {
         require(agreementDistance_ != 0);
-        require(agreementDistance_ <= _BPS);
+        require(agreementDistance_ <= 1e18);
 
         if (agreementDistance != agreementDistance_) {
             emit AgreementDistanceUpdated(
@@ -359,99 +338,18 @@ contract Aggor is IAggor, Auth, Toll {
 
     // -- Internal Helpers --
 
-    /// @dev Tries to return a value based on `a`, `b` and a tie breaker.
-    ///
-    /// @return bool Whether value is ok.
-    /// @return uint128 Value dervied via tie breaker.
-    function _tryTieBreaker(uint128 a, uint128 b)
-        internal
-        view
-        returns (bool, uint128)
-    {
-        // Use pegged price heuristic if in pegged asset mode.
-        if (isPeggedAsset) {
-            if (a < peggedPrice) {
-                if (b < peggedPrice) {
-                    // [_, _, p] => val = _max(a, b)
-                    return (true, _max(a, b));
-                } else {
-                    // [_, p, _] => val = p
-                    return (true, peggedPrice);
-                }
-            } else {
-                if (b < peggedPrice) {
-                    // [_, p, _] => val = p
-                    return (true, peggedPrice);
-                } else {
-                    // [p, _, _] => val = _min(a, b)
-                    return (true, _min(a, b));
-                }
-            }
-        }
-
-        // Otherwise try to use twap.
-        if (uniswapPool != address(0)) {
-            (bool ok, uint128 twap) = _readTwap();
-            if (ok) {
-                if (a < twap) {
-                    if (b < twap) {
-                        // [_, _, twap] => val = _max(a, b)
-                        return (true, _max(a, b));
-                    } else {
-                        // [_, twap, _] => val = twap
-                        return (true, twap);
-                    }
-                } else {
-                    if (b < twap) {
-                        // [_, twap, _] => val = twap
-                        return (true, twap);
-                    } else {
-                        // [twap, _, _] => val = _min(a, b)
-                        return (true, _min(a, b));
-                    }
-                }
-            }
-        }
-
-        // Otherwise no tie breaker possible.
-        return (false, 0);
-    }
-
     function _inAgreementDistance(uint128 a, uint128 b)
         internal
         view
         returns (bool)
     {
-        // Difference is 0% if both values are equal.
-        if (a == b) return true;
-
-        // Otherwise compute %-difference in basis points.
+        // Compute %-difference in WAD.
         uint diff = a > b
-            ? _BPS - (((uint(b) * 1e18) / uint(a)) * _BPS / 1e18)
-            : _BPS - (((uint(a) * 1e18) / uint(b)) * _BPS / 1e18);
+            ? 1e18 - uint(b) * 1e18 / uint(a)
+            : 1e18 - uint(a) * 1e18 / uint(b);
 
         // And return whether %-difference inside acceptable agreement distance.
         return diff <= agreementDistance;
-    }
-
-    function _median(uint128 a, uint128 b) internal pure returns (uint128) {
-        // Note to cast arguments to uint to avoid overflow possibilites.
-        uint sum;
-        unchecked {
-            sum = uint(a) + uint(b);
-        }
-        // assert(sum <= 2 * type(uint128).max);
-
-        // Note that >> 1 equals a divison by 2.
-        return uint128(sum >> 1);
-    }
-
-    function _max(uint128 a, uint128 b) internal pure returns (uint128) {
-        return a > b ? a : b;
-    }
-
-    function _min(uint128 a, uint128 b) internal pure returns (uint128) {
-        return a < b ? a : b;
     }
 
     // -- Overridden Toll Functions --
@@ -469,8 +367,6 @@ contract Aggor_BASE_QUOTE_COUNTER is Aggor {
     // @todo   ^^^^ ^^^^^ ^^^^^^^ Adjust name of Aggor instance
     constructor(
         address initialAuthed,
-        bool isPeggedAsset_,
-        uint128 peggedPrice_,
         address chronicle_,
         address chainlink_,
         address uniswapPool_,
@@ -478,13 +374,11 @@ contract Aggor_BASE_QUOTE_COUNTER is Aggor {
         address uniswapQuoteToken_,
         uint8 uniswapBaseDec_,
         uint32 uniswapLookback_,
-        uint16 agreementDistance_,
+        uint128 agreementDistance_,
         uint32 ageThreshold_
     )
         Aggor(
             initialAuthed,
-            isPeggedAsset_,
-            peggedPrice_,
             chronicle_,
             chainlink_,
             uniswapPool_,

@@ -20,11 +20,10 @@ import {Aggor} from "src/Aggor.sol";
 contract AggorIntegrationTest_eth_ETH_USD is Test {
     Aggor aggor;
 
-    // Pegged asset mode:
-    bool isPeggedAsset = false;
-    uint128 peggedPrice = 0;
-
     // Oracle Providers:
+    // Note that the Chronicle oracle is not being poked anymore. However, as
+    // the oracle's value is set directly via storage overwrites this is not an
+    // issue.
     address chronicle = address(0x1174948681bb05748E3682398d9b7a6836B07554);
     address chainlink = address(0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419);
 
@@ -42,18 +41,16 @@ contract AggorIntegrationTest_eth_ETH_USD is Test {
     uint32 uniswapLookback = 1 hours;
 
     // Configurations:
-    uint16 agreementDistance = 500; // 5%
+    uint128 agreementDistance = 5e16; // 5%
     uint32 ageThreshold = 1 days; // 1 day
 
     function setUp() public {
         // Start mainnet fork.
-        vm.createSelectFork("https://rpc.ankr.com/eth");
+        vm.createSelectFork("eth");
 
         // Deploy aggor.
         aggor = new Aggor(
             address(this),
-            isPeggedAsset,
-            peggedPrice,
             chronicle,
             chainlink,
             uniswapPool,
@@ -131,8 +128,6 @@ contract AggorIntegrationTest_eth_ETH_USD is Test {
         });
     }
 
-    function _setTWAP(uint128 val, uint age) internal {}
-
     // -- Tests --
 
     function test_ChronicleOk_ChainlinkOk_InAgreementDistance() public {
@@ -156,7 +151,10 @@ contract AggorIntegrationTest_eth_ETH_USD is Test {
         assertEq(got, want);
     }
 
+    // TODO: test_ChronicleOk_ChainlinkOk_NotInAgreementDistance.
     function test_ChronicleOk_ChainlinkOk_NotInAgreementDistance() public {
+        revert("NotImplemented");
+
         uint128 chr_val = 1000e18;
         uint128 chl_val = 1100e8; // 10% difference
 
@@ -168,7 +166,7 @@ contract AggorIntegrationTest_eth_ETH_USD is Test {
         _setChainlink(chl_val, chl_age);
 
         // Set twap.
-        // TODO:
+        // ...
     }
 
     function test_ChronicleOk_ChainlinkNotOk() public {
@@ -215,7 +213,10 @@ contract AggorIntegrationTest_eth_ETH_USD is Test {
         assertEq(got, want);
     }
 
-    function test_ChronicleNotOk_ChainlinkNotOk() public {}
+    // TODO: test_ChronicleNotOk_ChainlinkNotOk
+    function test_ChronicleNotOk_ChainlinkNotOk() public {
+        revert("NotImplemented");
+    }
 }
 
 interface IChainlinkAggregatorV3_Aggregator {

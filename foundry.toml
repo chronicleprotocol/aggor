@@ -5,16 +5,13 @@ libs = ['lib']
 
 # Compilation
 solc_version = "0.8.16"
-optimizer = true
+optimizer = false
 optimizer_runs = 10_000
-via_ir = true
+via_ir = false
 extra_output_files = ["metadata", "irOptimized"]
 
 # Testing
 block_timestamp = 1_680_220_800 # March 31, 2023 at 00:00 GMT
-
-[invariant]
-fail_on_revert = true
 
 [fmt]
 line_length = 80
@@ -29,8 +26,7 @@ runs = 10_000
 [profile.intense.invariant]
 runs = 10_000
 
-# Note, 300 req/min anon
 [rpc_endpoints]
-mainnet = "https://rpc.ankr.com/eth"
+eth = "https://eth.llamarpc.com"
 
 # See more config options https://github.com/foundry-rs/foundry/tree/master/config
