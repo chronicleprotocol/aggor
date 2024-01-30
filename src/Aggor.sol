@@ -272,13 +272,16 @@ contract Aggor is IAggor, Auth, Toll {
             answer := mload(add(returnData, 0x40))
             updatedAt := mload(add(returnData, 0x80))
         }
-        // assert(updatedAt <= block.timestamp);
+
+        // Note to never revert due to overflow.
+        bool isStale;
+        unchecked {
+            isStale = updatedAt + ageThreshold < block.timestamp;
+        }
 
         // Fail if answer not in [1, type(uint128).max] or answer stale.
-        if (
-            (answer <= 0 || uint(answer) > uint(type(uint128).max))
-                || updatedAt + ageThreshold < block.timestamp
-        ) {
+        if ((answer <= 0 || uint(answer) > uint(type(uint128).max)) || isStale)
+        {
             return (false, 0);
         }
 
