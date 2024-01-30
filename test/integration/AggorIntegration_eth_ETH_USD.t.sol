@@ -151,24 +151,6 @@ contract AggorIntegrationTest_eth_ETH_USD is Test {
         assertEq(got, want);
     }
 
-    // TODO: test_ChronicleOk_ChainlinkOk_NotInAgreementDistance.
-    function test_ChronicleOk_ChainlinkOk_NotInAgreementDistance() public {
-        revert("NotImplemented");
-
-        uint128 chr_val = 1000e18;
-        uint128 chl_val = 1100e8; // 10% difference
-
-        uint32 chr_age = uint32(block.timestamp);
-        uint32 chl_age = uint32(block.timestamp);
-
-        // Set oracles.
-        _setChronicle(chr_val, chr_age);
-        _setChainlink(chl_val, chl_age);
-
-        // Set twap.
-        // ...
-    }
-
     function test_ChronicleOk_ChainlinkNotOk() public {
         // ETH/USD: 1,000
         uint128 chr_val = 1000e18;
@@ -211,11 +193,6 @@ contract AggorIntegrationTest_eth_ETH_USD is Test {
         uint got = uint(aggor.latestAnswer());
 
         assertEq(got, want);
-    }
-
-    // TODO: test_ChronicleNotOk_ChainlinkNotOk
-    function test_ChronicleNotOk_ChainlinkNotOk() public {
-        revert("NotImplemented");
     }
 }
 
