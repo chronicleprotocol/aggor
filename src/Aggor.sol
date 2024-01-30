@@ -273,15 +273,16 @@ contract Aggor is IAggor, Auth, Toll {
             updatedAt := mload(add(returnData, 0x80))
         }
 
-        // Note to never revert due to overflow.
+        // Decide whether value is stale.
+        // Unchecked to circumvent revert due to overflow. Overflow otherwise
+        // no issue as updatedAt is solely controlled by Chainlink anyway.
         bool isStale;
         unchecked {
             isStale = updatedAt + ageThreshold < block.timestamp;
         }
 
-        // Fail if answer not in [1, type(uint128).max] or answer stale.
-        if ((answer <= 0 || uint(answer) > uint(type(uint128).max)) || isStale)
-        {
+        // Fail if answer is stale or answer not in [1, type(uint128).max].
+        if (isStale || answer <= 0 || uint(answer) > uint(type(uint128).max)) {
             return (false, 0);
         }
 
