@@ -43,22 +43,22 @@ contract Aggor is IAggor, Auth, Toll {
     // -- Oracles
 
     /// @inheritdoc IAggor
-    address public chronicle;
+    address public immutable chronicle;
     /// @inheritdoc IAggor
-    address public chainlink;
+    address public immutable chainlink;
 
     // -- Twap
 
     /// @inheritdoc IAggor
-    address public uniswapPool;
+    address public immutable uniswapPool;
     /// @inheritdoc IAggor
-    address public uniswapBaseToken;
+    address public immutable uniswapBaseToken;
     /// @inheritdoc IAggor
-    address public uniswapQuoteToken;
+    address public immutable uniswapQuoteToken;
     /// @inheritdoc IAggor
-    uint8 public uniswapBaseTokenDecimals;
+    uint8 public immutable uniswapBaseTokenDecimals;
     /// @inheritdoc IAggor
-    uint32 public uniswapLookback;
+    uint32 public immutable uniswapLookback;
 
     // -- Mutable Configurations --
 
@@ -142,43 +142,45 @@ contract Aggor is IAggor, Auth, Toll {
     ///      value itself is invalid.
     function _read() internal view returns (uint128, uint, Status memory) {
         // Read chronicle and chainlink oracles.
-        (bool ok_chr, uint128 val_chr) = _readChronicle();
-        (bool ok_chl, uint128 val_chl) = _readChainlink();
+        (bool okChr, uint128 valChr) = _readChronicle();
+        (bool okChl, uint128 valChl) = _readChainlink();
 
-        if (ok_chr && ok_chl) {
+        uint age = block.timestamp;
+
+        if (okChr && okChl) {
             // If both oracles ok and in agreement distance, return their median.
-            if (_inAgreementDistance(val_chr, val_chl)) {
+            if (_inAgreementDistance(valChr, valChl)) {
                 return (
-                    LibMedian.median(val_chr, val_chl),
-                    block.timestamp,
+                    LibMedian.median(valChr, valChl),
+                    age,
                     Status({path: 2, goodOracleCtr: 2})
                 );
             }
 
             // If both oracles ok but not in agreement distance, derive value
             // using TWAP as tie breaker.
-            (bool ok_twap, uint128 val_twap) = _readTwap();
-            if (ok_twap) {
-                uint128 val = LibMedian.median(val_chr, val_chl, val_twap);
-                return
-                    (val, block.timestamp, Status({path: 3, goodOracleCtr: 2}));
+            (bool okTwap, uint128 valTwap) = _readTwap();
+            if (okTwap) {
+                return (
+                    LibMedian.median(valChr, valChl, valTwap),
+                    age,
+                    Status({path: 3, goodOracleCtr: 2})
+                );
             }
 
             // Otherwise not possible to decide which oracle is ok.
-        } else if (ok_chr) {
+        } else if (okChr) {
             // If only chronicle ok, use chronicle's value.
-            return
-                (val_chr, block.timestamp, Status({path: 4, goodOracleCtr: 1}));
-        } else if (ok_chl) {
+            return (valChr, age, Status({path: 4, goodOracleCtr: 1}));
+        } else if (okChl) {
             // If only chainlink ok, use chainlink's value.
-            return
-                (val_chl, block.timestamp, Status({path: 4, goodOracleCtr: 1}));
+            return (valChl, age, Status({path: 4, goodOracleCtr: 1}));
         }
 
         // If no oracle ok use TWAP.
         (bool ok, uint128 twap) = _readTwap();
         if (ok) {
-            return (twap, block.timestamp, Status({path: 5, goodOracleCtr: 0}));
+            return (twap, age, Status({path: 5, goodOracleCtr: 0}));
         }
 
         // Otherwise no value derivation possible.
@@ -215,14 +217,61 @@ contract Aggor is IAggor, Auth, Toll {
     /// @return bool Whether oracle is ok.
     /// @return uint128 The oracle's val.
     function _readChainlink() internal view returns (bool, uint128) {
-        // forgefmt: disable-next-item
-        (
-            /*uint80 roundId*/,
-            int answer,
-            /*uint startedAt*/,
-            uint updatedAt,
-            /*uint80 answeredInRound*/
-        ) = IChainlinkAggregatorV3(chainlink).latestRoundData();
+        // Note that Chainlink's oracles live behind a proxy, ie an oracle's
+        // implementation may change in the future. In order to defend against
+        // malicious implementation updates the oracle is read via a low-level
+        // staticcall expecting the exact amount of return data as specified via
+        // the latestRoundData() function.
+        //
+        // Note that while Solidity's try-catch catches reverts it nevertheless
+        // reverts if there is less than expected return data, ie if the return
+        // data decoding fails.
+
+        // Load chainlink's address to memory as accessing immutables not
+        // supported in inline assembly.
+        address target = chainlink;
+        // Payload is IChainlinkAggregatorV3.latestRoundData()'s function selector.
+        bytes memory payload = hex"feaf968c";
+        uint payloadSize = 4;
+        // The return data consists of 5 words, namely:
+        // - uint80 roundId
+        // - int    answer
+        // - uint   startedAt
+        // - uint   updatedAt
+        // - uint80 answeredInRound
+        //
+        // Note that return data is not packed.
+        uint returnDataSize = 5 * 0x20;
+
+        bool ok;
+        bytes memory returnData = new bytes(returnDataSize);
+        assembly ("memory-safe") {
+            // Perform staticcall with 1/64 of available gas left.
+            // Note to not automatically copy return data into memory.
+            ok :=
+                staticcall(gas(), target, add(payload, 0x20), payloadSize, 0, 0)
+
+            // Load return data only into memory if it's of correct size.
+            // Otherwise mark staticcall as not ok.
+            switch eq(returndatasize(), returnDataSize)
+            case true {
+                returndatacopy(add(returnData, 0x20), 0, returnDataSize)
+            }
+            default { ok := false }
+        }
+
+        // Fail if staticall failed.
+        if (!ok) {
+            return (false, 0);
+        }
+
+        // Decode necessary return data.
+        int answer;
+        uint updatedAt;
+        assembly ("memory-safe") {
+            answer := mload(add(returnData, 0x40))
+            updatedAt := mload(add(returnData, 0x80))
+        }
         // assert(updatedAt <= block.timestamp);
 
         // Fail if answer not in [1, type(uint128).max] or answer stale.
