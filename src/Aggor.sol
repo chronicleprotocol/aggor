@@ -396,13 +396,11 @@ contract Aggor is IAggor, Auth, Toll {
         view
         returns (bool)
     {
-        // Compute %-difference in WAD.
-        uint diff = a > b
-            ? 1e18 - uint(b) * 1e18 / uint(a)
-            : 1e18 - uint(a) * 1e18 / uint(b);
-
-        // And return whether %-difference inside acceptable agreement distance.
-        return diff <= agreementDistance;
+        if (a > b) {
+            return uint(b) * 1e18 >= agreementDistance * uint(a);
+        } else {
+            return uint(a) * 1e18 >= agreementDistance * uint(b);
+        }
     }
 
     // -- Overridden Toll Functions --

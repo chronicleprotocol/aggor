@@ -112,6 +112,9 @@ interface IAggor {
 
     /// @notice Returns the agreement distance in WAD used to determine whether
     ///         a set of oracle values are in agreement.
+    /// @dev Note that the agreement distance represents the allowed deviation,
+    ///      eg an agreement distance of 0.95e18 implies a maximum allowed
+    ///      deviation of 5%.
     /// @return agreementDistance The agreement distance.
     function agreementDistance()
         external

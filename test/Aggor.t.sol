@@ -44,7 +44,7 @@ contract AggorTest is Test {
     uint valTwap = 999_902;
 
     // Configurations:
-    uint128 agreementDistance = 1e17; // 10%
+    uint128 agreementDistance = 9e17; // = 0.9e18 = 10%
     uint32 ageThreshold = 1 days; // 1 day
 
     function setUp() public {
@@ -263,7 +263,8 @@ contract AggorTest is Test {
         );
     }
 
-    function test_Deployment_FailsIf_UniswapLookbackBiggerThanOldestObservation() public {
+    function test_Deployment_FailsIf_UniswapLookbackBiggerThanOldestObservation(
+    ) public {
         uint8 decimals = IERC20(uniswapBaseToken).decimals();
 
         vm.expectRevert();
@@ -339,7 +340,7 @@ contract AggorTest is Test {
 
         // Let Chainlink's val have some % difference to Chronicles.
         // Note to keep vals in agreement distance.
-        diff = _bound(diff, 0, agreementDistance);
+        diff = _bound(diff, 0, 1e18 - agreementDistance);
         valChl = diffDirection
             ? valChl + (valChl * diff) / 1e18
             : valChl - (valChl * diff) / 1e18;
@@ -362,24 +363,16 @@ contract AggorTest is Test {
 
     function testFuzz_read_ChronicleOk_ChainlinkOk_NotInAgreementDistance_TwapOk(
         uint128 val,
-        uint diff,
         bool diffDirection
     ) public {
-        vm.assume(val != 0);
-        vm.assume(val < type(uint128).max / 10 ** 18);
+        val = uint128(_bound(val, 1, type(uint128).max / 10 ** 18));
 
         // Scale val to oracles' decimals.
         uint valChr = val * 10 ** 18;
         uint valChl = val * 10 ** 8;
 
-        // Let Chainlink's val have some % difference bigger than agreement
-        // distance to Chronicles.
-        // Note to overestimate diff to account for rounding errors.
-        diff = _bound(diff, agreementDistance * 2, 1e18 - 1);
-        //diff = 2e17;//_bound(diff, 0, agreementDistance) + agreementDistance;
-        valChl = diffDirection
-            ? valChl + (valChl * diff) / 1e18
-            : valChl - (valChl * diff) / 1e18;
+        // Let values be outside of agreement distance.
+        valChl = diffDirection ? 2 * valChl : valChl / 2;
 
         // Set vals.
         ChronicleMock(chronicle).setValAndAge(valChr, block.timestamp);
