@@ -26,6 +26,10 @@ import {ERC20Mock} from "./mocks/ERC20Mock.sol";
 contract AggorTest is Test {
     Aggor aggor;
 
+    // Contract inheriting from Aggor exposing the constructor helper function.
+    // This lets forge coverage reports include the function's execution.
+    Aggor_VerifyTwapConfig aggor_VerifyTwapConfig;
+
     // Oracle Providers:
     address chronicle = address(new ChronicleMock());
     address chainlink = address(new ChainlinkMock());
@@ -63,6 +67,30 @@ contract AggorTest is Test {
 
         // Note to kiss address(this) on aggor.
         aggor.kiss(address(this));
+
+        // Note to also deploy an Aggor with the constructor's
+        // `_verifyTwapConfig()` function exposed.
+        aggor_VerifyTwapConfig = new Aggor_VerifyTwapConfig(
+            address(this),
+            chronicle,
+            chainlink,
+            uniswapPool,
+            uniswapBaseToken,
+            uniswapQuoteToken,
+            IERC20(uniswapBaseToken).decimals(),
+            uniswapLookback,
+            agreementDistance,
+            ageThreshold
+        );
+
+        // Execute Aggor's _verifyTwapConfig function for coverage reporting.
+        aggor_VerifyTwapConfig.verifyTwapConfig(
+            uniswapPool,
+            uniswapBaseToken,
+            uniswapQuoteToken,
+            IERC20(uniswapBaseToken).decimals(),
+            uniswapLookback
+        );
     }
 
     // -- Test: Deployment --
@@ -83,6 +111,15 @@ contract AggorTest is Test {
             agreementDistance,
             ageThreshold
         );
+
+        vm.expectRevert();
+        aggor_VerifyTwapConfig.verifyTwapConfig(
+            address(0), // <- !
+            uniswapBaseToken,
+            uniswapQuoteToken,
+            decimals,
+            uniswapLookback
+        );
     }
 
     function test_Deployment_FailsIf_BaseTokenEqualsQuoteToken() public {
@@ -100,6 +137,15 @@ contract AggorTest is Test {
             uniswapLookback,
             agreementDistance,
             ageThreshold
+        );
+
+        vm.expectRevert();
+        aggor_VerifyTwapConfig.verifyTwapConfig(
+            uniswapPool,
+            uniswapBaseToken,
+            uniswapBaseToken, // <- !
+            decimals,
+            uniswapLookback
         );
     }
 
@@ -120,6 +166,15 @@ contract AggorTest is Test {
             agreementDistance,
             ageThreshold
         );
+
+        vm.expectRevert();
+        aggor_VerifyTwapConfig.verifyTwapConfig(
+            uniswapPool,
+            notPoolToken, // <- !
+            uniswapQuoteToken,
+            decimals,
+            uniswapLookback
+        );
     }
 
     function test_Deployment_FailsIf_QuoteTokenNotPoolToken() public {
@@ -139,6 +194,15 @@ contract AggorTest is Test {
             agreementDistance,
             ageThreshold
         );
+
+        vm.expectRevert();
+        aggor_VerifyTwapConfig.verifyTwapConfig(
+            uniswapPool,
+            uniswapBaseToken,
+            notPoolToken, // <- !
+            decimals,
+            uniswapLookback
+        );
     }
 
     function test_Deployment_FailsIf_BaseTokenDecimalsWrong() public {
@@ -157,12 +221,23 @@ contract AggorTest is Test {
             agreementDistance,
             ageThreshold
         );
+
+        vm.expectRevert();
+        aggor_VerifyTwapConfig.verifyTwapConfig(
+            uniswapPool,
+            uniswapBaseToken,
+            uniswapQuoteToken,
+            decimals + 1, // <- !
+            uniswapLookback
+        );
     }
 
     function test_Deployment_FailsIf_BaseTokenDecimalsBiggerThanMaxSupportedDecimals(
     ) public {
         uniswapBaseToken = address(new ERC20Mock("base", "base", 100)); // <- !
         uint8 decimals = IERC20(uniswapBaseToken).decimals();
+
+        UniswapPoolMock(uniswapPool).setToken0(uniswapBaseToken);
 
         vm.expectRevert();
         new Aggor(
@@ -176,6 +251,42 @@ contract AggorTest is Test {
             uniswapLookback,
             agreementDistance,
             ageThreshold
+        );
+
+        vm.expectRevert();
+        aggor_VerifyTwapConfig.verifyTwapConfig(
+            uniswapPool,
+            uniswapBaseToken,
+            uniswapQuoteToken,
+            decimals,
+            uniswapLookback
+        );
+    }
+
+    function test_Deployment_FailsIf_UniswapLookbackBiggerThanOldestObservation() public {
+        uint8 decimals = IERC20(uniswapBaseToken).decimals();
+
+        vm.expectRevert();
+        new Aggor(
+            address(this),
+            chronicle,
+            chainlink,
+            uniswapPool,
+            uniswapBaseToken,
+            uniswapQuoteToken,
+            decimals,
+            type(uint32).max, // <- !
+            agreementDistance,
+            ageThreshold
+        );
+
+        vm.expectRevert();
+        aggor_VerifyTwapConfig.verifyTwapConfig(
+            uniswapPool,
+            uniswapBaseToken,
+            uniswapQuoteToken,
+            decimals,
+            type(uint32).max
         );
     }
 
@@ -569,5 +680,49 @@ contract AggorTest is Test {
     function _setTwapNotOk() public {
         // See mocks/UniswapPoolMock::oberseve().
         UniswapPoolMock(uniswapPool).setShouldOverflowUint128(true);
+    }
+}
+
+contract Aggor_VerifyTwapConfig is Aggor {
+    constructor(
+        address initialAuthed,
+        address chronicle_,
+        address chainlink_,
+        address uniswapPool_,
+        address uniswapBaseToken_,
+        address uniswapQuoteToken_,
+        uint8 uniswapBaseTokenDecimals_,
+        uint32 uniswapLookback_,
+        uint128 agreementDistance_,
+        uint32 ageThreshold_
+    )
+        Aggor(
+            initialAuthed,
+            chronicle_,
+            chainlink_,
+            uniswapPool_,
+            uniswapBaseToken_,
+            uniswapQuoteToken_,
+            uniswapBaseTokenDecimals_,
+            uniswapLookback_,
+            agreementDistance_,
+            ageThreshold_
+        )
+    {}
+
+    function verifyTwapConfig(
+        address uniswapPool_,
+        address uniswapBaseToken_,
+        address uniswapQuoteToken_,
+        uint8 uniswapBaseTokenDecimals_,
+        uint32 uniswapLookback_
+    ) public view {
+        _verifyTwapConfig(
+            uniswapPool_,
+            uniswapBaseToken_,
+            uniswapQuoteToken_,
+            uniswapBaseTokenDecimals_,
+            uniswapLookback_
+        );
     }
 }
