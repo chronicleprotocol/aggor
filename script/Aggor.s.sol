@@ -7,26 +7,15 @@ import {console2 as console} from "forge-std/console2.sol";
 import {IAuth} from "chronicle-std/auth/IAuth.sol";
 
 import {IGreenhouse} from "greenhouse/IGreenhouse.sol";
-import {IERC20} from "forge-std/interfaces/IERC20.sol";
-import {IUniswapV3Pool} from
-    "uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
-import {OracleLibrary} from
-    "uniswap/v3-periphery/contracts/libraries/OracleLibrary.sol";
 
 import {IAggor} from "src/IAggor.sol";
 import {Aggor_BASE_QUOTE_COUNTER as Aggor} from "src/Aggor.sol";
 // @todo      ^^^^ ^^^^^ ^^^^^^^ Adjust name of Aggor instance
 
-import {IChainlinkAggregatorV3} from
-    "src/interfaces/_external/IChainlinkAggregatorV3.sol";
-
 /**
  * @notice Aggor Management Script
  */
 contract AggorScript is Script {
-    /// @dev The maximum number of decimals for Uniswap's base asset supported.
-    uint internal constant MAX_UNISWAP_BASE_DECIMALS = 38;
-
     // -- Deployment Configuration --
 
     // -- Immutable
@@ -43,6 +32,8 @@ contract AggorScript is Script {
 
     uint128 agreementDistance;
     uint32 ageThreshold;
+
+    // -- Deployment Function --
 
     /// @dev Deploys a new Aggor instance via Greenhouse instance
     ///      `greenhouse` and salt `salt` with `initialAuthed` being the

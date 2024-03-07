@@ -58,29 +58,27 @@ contract UniswapPoolMock {
         int56[] memory tickCumulatives = new int56[](2);
         uint160[] memory secondsPerLiquidityCumulativeX128s = new uint160[](2);
 
+        // forgefmt: disable-start
         if (shouldOverflowUint128) {
-            // TODO: Provides a hardcoded price bigger than type(uint128).max.
-            //
-    // forgefmt: disable-start
-            tickCumulatives[0] = -5048909542860 - 887272;
-            tickCumulatives[1] = -5048909542860;
+            // Provides a hardcoded price bigger than type(uint128).max.
+            // Found via extensive fuzzing.
+            // Price: 5172277991453938211655317709858723532690
+            tickCumulatives[0] = -36028797018963967;
+            tickCumulatives[1] = -36028753818877567;
 
-            secondsPerLiquidityCumulativeX128s[0] = 1;
-            secondsPerLiquidityCumulativeX128s[1] = type(uint128).max;
-            // forgefmt: disable-end
+            secondsPerLiquidityCumulativeX128s[0] = 0;
+            secondsPerLiquidityCumulativeX128s[1] = 1;
         } else {
             // Provides a hardcoded price copied from the DAI/USDC 0.01% prool.
             // See https://etherscan.io/address/0x5777d92f208679db4b9778590fa3cab3ac9e2168#readContract.
             // Price: 999902
-            //
-    // forgefmt: disable-start
             tickCumulatives[0] = -19015290435809;
             tickCumulatives[1] = -19039164915809;
 
             secondsPerLiquidityCumulativeX128s[0] = 5758130429968257423961804564;
             secondsPerLiquidityCumulativeX128s[1] = 5758130494593330591803124245;
-            // forgefmt: disable-end
         }
+        // forgefmt: disable-end
 
         return (tickCumulatives, secondsPerLiquidityCumulativeX128s);
     }

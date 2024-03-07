@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.16;
 
+/**
+ * @title LibMedian
+ *
+ * @notice Library to efficiently compute medians.
+ */
 library LibMedian {
     function median(uint128 a, uint128 b) internal pure returns (uint128) {
         // Note to cast arguments to uint to avoid overflow possibilites.

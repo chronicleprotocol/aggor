@@ -12,10 +12,11 @@ import {OracleLibrary} from
 library LibUniswapOracles {
     using OracleLibrary for address;
 
-    /// @dev Reads the TWAP derived price from a Uniswap oracle.
+    /// @dev Reads the TWAP derived price from given Uniswap pool `pool`.
     ///
-    /// @dev The Uniswap pool address + pair addresses can be discovered at
-    ///      https://app.uniswap.org/#/swap
+    /// @dev The Uniswap pool address and pair addresses can be discovered at
+    ///      https://app.uniswap.org/#/swap.
+    ///
     /// @param pool The Uniswap pool that wil be observed.
     /// @param baseToken The base token for the pool, e.g. WETH in WETHUSDT.
     /// @param quoteToken The quote pair for the pool, e.g. USDT in WETHUSDT.
@@ -37,8 +38,9 @@ library LibUniswapOracles {
         return OracleLibrary.getQuoteAtTick(tick, amt, baseToken, quoteToken);
     }
 
-    /// @notice Given a pool, it returns the number of seconds ago of the oldest
-    ///         stored observation.
+    /// @dev Returns the number of seconds ago of the oldest stored observations
+    ///      for Uniswap pool `pool`.
+    ///
     /// @param pool Address of Uniswap V3 pool that we want to observe.
     /// @return secondsAgo The number of seconds ago of the oldest observation
     ///                    stored for the pool.

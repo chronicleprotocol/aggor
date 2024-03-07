@@ -9,6 +9,7 @@ import {IToll} from "chronicle-std/toll/IToll.sol";
 import {IChronicle} from "chronicle-std/IChronicle.sol";
 
 import {Aggor} from "src/Aggor.sol";
+import {IAggor} from "src/IAggor.sol";
 
 /**
  * @dev Aggor Integration Test for
@@ -132,67 +133,94 @@ contract AggorIntegrationTest_eth_ETH_USD is Test {
 
     function test_ChronicleOk_ChainlinkOk_InAgreementDistance() public {
         // ETH/USD: 1,000
-        uint128 chr_val = 1000e18;
-        uint128 chl_val = 1000e8;
+        uint128 chrVal = 1000e18;
+        uint128 chlVal = 1000e8;
 
-        uint32 chr_age = uint32(block.timestamp);
-        uint32 chl_age = uint32(block.timestamp);
+        uint32 chrAge = uint32(block.timestamp);
+        uint32 chlAge = uint32(block.timestamp);
 
         // Set oracles.
-        _setChronicle(chr_val, chr_age);
-        _setChainlink(chl_val, chl_age);
+        _setChronicle(chrVal, chrAge);
+        _setChainlink(chlVal, chlAge);
 
-        // Expected aggor value: median(chr_val, chl_val)
-        uint want = 1000e8;
+        // Expected value: median(chrVal, chlVal)
+        // Expected path: Both oracles valid and in agreement distance
+        uint wantVal = 1000e8;
+        IAggor.Status memory wantStatus =
+            IAggor.Status({path: 2, goodOracleCtr: 2});
 
         // Read Aggor.
-        uint got = uint(aggor.latestAnswer());
+        uint gotVal;
+        uint gotAge;
+        IAggor.Status memory gotStatus;
+        (gotVal, gotAge, gotStatus) = aggor.readWithStatus();
 
-        assertEq(got, want);
+        assertEq(gotVal, wantVal);
+        assertEq(gotAge, block.timestamp);
+        assertEq(gotStatus.path, wantStatus.path);
+        assertEq(gotStatus.goodOracleCtr, wantStatus.goodOracleCtr);
     }
 
     function test_ChronicleOk_ChainlinkNotOk() public {
         // ETH/USD: 1,000
-        uint128 chr_val = 1000e18;
-        uint128 chl_val = 1000e8;
+        uint128 chrVal = 1000e18;
+        uint128 chlVal = 1000e8;
 
         // Let chainlink be stale.
-        uint32 chr_age = uint32(block.timestamp);
-        uint32 chl_age = uint32(block.timestamp - aggor.ageThreshold() - 1);
+        uint32 chrAge = uint32(block.timestamp);
+        uint32 chlAge = uint32(block.timestamp - aggor.ageThreshold() - 1);
 
         // Set oracles.
-        _setChronicle(chr_val, chr_age);
-        _setChainlink(chl_val, chl_age);
+        _setChronicle(chrVal, chrAge);
+        _setChainlink(chlVal, chlAge);
 
-        // Expected value: chr_val in 8 decimals
-        uint want = 1000e8;
+        // Expected value: chrVal in 8 decimals
+        // Expected path: Only one oracle valid
+        uint wantVal = 1000e8;
+        IAggor.Status memory wantStatus =
+            IAggor.Status({path: 4, goodOracleCtr: 1});
 
         // Read aggor.
-        uint got = uint(aggor.latestAnswer());
+        uint gotVal;
+        uint gotAge;
+        IAggor.Status memory gotStatus;
+        (gotVal, gotAge, gotStatus) = aggor.readWithStatus();
 
-        assertEq(got, want);
+        assertEq(gotVal, wantVal);
+        assertEq(gotAge, block.timestamp);
+        assertEq(gotStatus.path, wantStatus.path);
+        assertEq(gotStatus.goodOracleCtr, wantStatus.goodOracleCtr);
     }
 
     function test_ChronicleNotOk_ChainlinkOk() public {
         // ETH/USD: 1,000
-        uint128 chr_val = 1000e18;
-        uint128 chl_val = 1000e8;
+        uint128 chrVal = 1000e18;
+        uint128 chlVal = 1000e8;
 
         // Let chronicle be stale.
-        uint32 chr_age = uint32(block.timestamp - aggor.ageThreshold() - 1);
-        uint32 chl_age = uint32(block.timestamp);
+        uint32 chrAge = uint32(block.timestamp - aggor.ageThreshold() - 1);
+        uint32 chlAge = uint32(block.timestamp);
 
         // Set oracles.
-        _setChronicle(chr_val, chr_age);
-        _setChainlink(chl_val, chl_age);
+        _setChronicle(chrVal, chrAge);
+        _setChainlink(chlVal, chlAge);
 
         // Expected value: chl_val
-        uint want = 1000e8;
+        // Expected path: Only one oracle valid
+        uint wantVal = 1000e8;
+        IAggor.Status memory wantStatus =
+            IAggor.Status({path: 4, goodOracleCtr: 1});
 
         // Read aggor.
-        uint got = uint(aggor.latestAnswer());
+        uint gotVal;
+        uint gotAge;
+        IAggor.Status memory gotStatus;
+        (gotVal, gotAge, gotStatus) = aggor.readWithStatus();
 
-        assertEq(got, want);
+        assertEq(gotVal, wantVal);
+        assertEq(gotAge, block.timestamp);
+        assertEq(gotStatus.path, wantStatus.path);
+        assertEq(gotStatus.goodOracleCtr, wantStatus.goodOracleCtr);
     }
 }
 

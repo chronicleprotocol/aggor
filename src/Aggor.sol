@@ -31,6 +31,7 @@ contract Aggor is IAggor, Auth, Toll {
     /// @dev The maximum number of decimals for Uniswap's base asset supported.
     uint internal constant _MAX_UNISWAP_BASE_DECIMALS = 38;
 
+    /// @dev The decimals value used by Chronicle Protocol oracles.
     uint8 internal constant _DECIMALS_CHRONICLE = 18;
 
     // -- Immutable Configurations --
@@ -217,77 +218,50 @@ contract Aggor is IAggor, Auth, Toll {
     /// @return bool Whether oracle is ok.
     /// @return uint128 The oracle's val.
     function _readChainlink() internal view returns (bool, uint128) {
-        // Note that Chainlink's oracles live behind a proxy, ie an oracle's
-        // implementation may change in the future. In order to defend against
-        // malicious implementation updates the oracle is read via a low-level
-        // staticcall expecting the exact amount of return data as specified via
-        // the latestRoundData() function.
+        // !!! IMPORTANT WARNING !!!
         //
-        // Note that while Solidity's try-catch catches reverts it nevertheless
-        // reverts if there is less than expected return data, ie if the return
-        // data decoding fails.
-
-        // Load chainlink's address to memory as accessing immutables not
-        // supported in inline assembly.
-        address target = chainlink;
-        // Payload is IChainlinkAggregatorV3.latestRoundData()'s function selector.
-        bytes memory payload = hex"feaf968c";
-        uint payloadSize = 4;
-        // The return data consists of 5 words, namely:
-        // - uint80 roundId
-        // - int    answer
-        // - uint   startedAt
-        // - uint   updatedAt
-        // - uint80 answeredInRound
+        // This function implementation MUST NOT be used when the Chainlink
+        // oracle's implementation is behind a proxy!
         //
-        // Note that return data is not packed.
-        uint returnDataSize = 5 * 0x20;
+        // Otherwise a malicious contract update is possible via which every
+        // read will fail. Note that this vulnerability _cannot_ be fixed via
+        // using try-catch as of version 0.8.24. This is because the abi.decoding
+        // of the return data is "outside" the try-block.
+        //
+        // The only way to fully protect against malicious contract updates is
+        // via using a low-level staticcall with _manual_ returndata decoding!
+        //
+        // Note that the trust towards Chainlink not performing a malicious
+        // contract update is different from the trust to not maliciously update
+        // the oracle configuration. While the latter can lead to invalid and
+        // malicious price updates, the first may lead to a total
+        // denial-of-service for protocols reading the proxy.
 
-        bool ok;
-        bytes memory returnData = new bytes(returnDataSize);
-        assembly ("memory-safe") {
-            // Perform staticcall with 1/64 of available gas left.
-            // Note to not automatically copy return data into memory.
-            ok :=
-                staticcall(gas(), target, add(payload, 0x20), payloadSize, 0, 0)
-
-            // Load return data only into memory if it's of correct size.
-            // Otherwise mark staticcall as not ok.
-            switch eq(returndatasize(), returnDataSize)
-            case true {
-                returndatacopy(add(returnData, 0x20), 0, returnDataSize)
+        try IChainlinkAggregatorV3(chainlink).latestRoundData() returns (
+            uint80 /*roundId*/,
+            int answer,
+            uint /*startedAt*/,
+            uint updatedAt,
+            uint80 /*answeredInRound*/
+        ) {
+            // Decide whether value is stale.
+            // Unchecked to circumvent revert due to overflow. Overflow otherwise
+            // no issue as updatedAt is solely controlled by Chainlink anyway.
+            bool isStale;
+            unchecked {
+                isStale = updatedAt + ageThreshold < block.timestamp;
             }
-            default { ok := false }
-        }
 
-        // Fail if staticall failed.
-        if (!ok) {
+            // Fail if answer stale or not in [1, type(uint128).max].
+            if (isStale || answer <= 0 || uint(answer) > uint(type(uint128).max)) {
+                return (false, 0);
+            }
+
+            // Otherwise ok.
+            return (true, uint128(uint(answer)));
+        } catch {
             return (false, 0);
         }
-
-        // Decode necessary return data.
-        int answer;
-        uint updatedAt;
-        assembly ("memory-safe") {
-            answer := mload(add(returnData, 0x40))
-            updatedAt := mload(add(returnData, 0x80))
-        }
-
-        // Decide whether value is stale.
-        // Unchecked to circumvent revert due to overflow. Overflow otherwise
-        // no issue as updatedAt is solely controlled by Chainlink anyway.
-        bool isStale;
-        unchecked {
-            isStale = updatedAt + ageThreshold < block.timestamp;
-        }
-
-        // Fail if answer is stale or answer not in [1, type(uint128).max].
-        if (isStale || answer <= 0 || uint(answer) > uint(type(uint128).max)) {
-            return (false, 0);
-        }
-
-        // Otherwise ok.
-        return (true, uint128(uint(answer)));
     }
 
     /// @dev Reads the twap oracle.

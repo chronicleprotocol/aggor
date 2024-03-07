@@ -17,9 +17,6 @@ import {LibMedian} from "src/libs/LibMedian.sol";
 
 import {ChronicleMock} from "./mocks/ChronicleMock.sol";
 import {ChainlinkMock} from "./mocks/ChainlinkMock.sol";
-import {ChainlinkMock_Revert} from "./mocks/ChainlinkMock_Revert.sol";
-import {ChainlinkMock_NoReturnData} from
-    "./mocks/ChainlinkMock_NoReturnData.sol";
 import {UniswapPoolMock} from "./mocks/UniswapPoolMock.sol";
 import {ERC20Mock} from "./mocks/ERC20Mock.sol";
 
@@ -392,13 +389,34 @@ contract AggorTest is Test {
         _checkReadFunctions(wantVal, wantAge, wantStatus);
     }
 
-    // TODO: testFuzz_read_ChronicleOk_ChainlinkOk_NotInAgreementDistance_TwapNotOk
     function testFuzz_read_ChronicleOk_ChainlinkOk_NotInAgreementDistance_TwapNotOk(
-        uint128 price,
-        uint diff,
-        uint diffDirection
+        uint128 val,
+        bool diffDirection
     ) public {
-        revert("NotImplemented");
+        val = uint128(_bound(val, 1, type(uint128).max / 10 ** 18));
+
+        // Scale val to oracles' decimals.
+        uint valChr = val * 10 ** 18;
+        uint valChl = val * 10 ** 8;
+
+        // Let values be outside of agreement distance.
+        valChl = diffDirection ? 2 * valChl : valChl / 2;
+
+        // Set vals.
+        ChronicleMock(chronicle).setValAndAge(valChr, block.timestamp);
+        ChainlinkMock(chainlink).setValAndAge(
+            int(uint(valChl)), block.timestamp
+        );
+
+        // Let twap be not ok.
+        _setTwapNotOk();
+
+        // Expect aggor to not be able to derive a value.
+        uint wantVal = 0;
+        uint wantAge = 0;
+        IAggor.Status memory wantStatus =
+            IAggor.Status({path: 6, goodOracleCtr: 0});
+        _checkReadFunctions(wantVal, wantAge, wantStatus);
     }
 
     function testFuzz_read_ChronicleOk_ChainlinkNotOk_ValNegative(
@@ -531,10 +549,7 @@ contract AggorTest is Test {
         _checkReadFunctions(wantVal, wantAge, wantStatus);
     }
 
-    // TODO: testFuzz_read_ChronicleNotOk_ChainlinkNotOk_TwapNotOk
     function testFuzz_read_ChronicleNotOk_ChainlinkNotOk_TwapNotOk() public {
-        revert("NotImplemented");
-
         // Let Chronicle's and Chainlink's val be not ok.
         // Use timestamp of zero to make vals stale.
         ChronicleMock(chronicle).setValAndAge(1, 0);
@@ -547,66 +562,6 @@ contract AggorTest is Test {
         uint wantAge = 0;
         IAggor.Status memory wantStatus =
             IAggor.Status({path: 6, goodOracleCtr: 0});
-        _checkReadFunctions(wantVal, wantAge, wantStatus);
-    }
-
-    // -- read with malicious Chainlink implementation
-
-    function test_readMaliciousChainlink_Revert() public {
-        // Deploy aggor with reverting Chainlink implementation.
-        chainlink = address(new ChainlinkMock_Revert());
-        aggor = new Aggor(
-            address(this),
-            chronicle,
-            chainlink,
-            uniswapPool,
-            uniswapBaseToken,
-            uniswapQuoteToken,
-            IERC20(uniswapBaseToken).decimals(),
-            uniswapLookback,
-            agreementDistance,
-            ageThreshold
-        );
-
-        // Note to kiss address(this) on aggor.
-        aggor.kiss(address(this));
-
-        uint valChr = 1e18; // 1
-        ChronicleMock(chronicle).setValAndAge(valChr, block.timestamp);
-
-        uint wantVal = 1e8;
-        uint wantAge = block.timestamp;
-        IAggor.Status memory wantStatus =
-            IAggor.Status({path: 4, goodOracleCtr: 1});
-        _checkReadFunctions(wantVal, wantAge, wantStatus);
-    }
-
-    function test_readMaliciousChainlink_NoReturnData() public {
-        // Deploy aggor with Chainlink implementation returning no data.
-        chainlink = address(new ChainlinkMock_NoReturnData());
-        aggor = new Aggor(
-            address(this),
-            chronicle,
-            chainlink,
-            uniswapPool,
-            uniswapBaseToken,
-            uniswapQuoteToken,
-            IERC20(uniswapBaseToken).decimals(),
-            uniswapLookback,
-            agreementDistance,
-            ageThreshold
-        );
-
-        // Note to kiss address(this) on aggor.
-        aggor.kiss(address(this));
-
-        uint valChr = 1e18; // 1
-        ChronicleMock(chronicle).setValAndAge(valChr, block.timestamp);
-
-        uint wantVal = 1e8;
-        uint wantAge = block.timestamp;
-        IAggor.Status memory wantStatus =
-            IAggor.Status({path: 4, goodOracleCtr: 1});
         _checkReadFunctions(wantVal, wantAge, wantStatus);
     }
 
