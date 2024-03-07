@@ -21,7 +21,7 @@ This document provides technical documentation for _Chronicle Protocol_'s Aggor 
 ## Terminology
 
 - An **Oracle** is defined as a push-based oracle system, eg _Chronicle Protocol_, Chainlink, etc.
-- A **TWAP** is an onchain time weighted-average based oracle via which an asset's price can be derived without offchain components.
+- A **TWAP** is an onchain time-weighted average based oracle via which an asset's price can be derived without offchain components.
 - An **oracle** (lower case) is a generic term that can refer to both a TWAP or an Oracle.
 - The **agreement distance** is a mutable configuration defining the threshold until which Oracle values are defined as being in agreement.
 

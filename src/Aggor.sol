@@ -233,14 +233,14 @@ contract Aggor is IAggor, Auth, Toll {
         //
         // Note that the trust towards Chainlink not performing a malicious
         // contract update is different from the trust to not maliciously update
-        // the oracle configuration. While the latter can lead to invalid and
+        // the oracle's configuration. While the latter can lead to invalid and
         // malicious price updates, the first may lead to a total
         // denial-of-service for protocols reading the proxy.
 
         try IChainlinkAggregatorV3(chainlink).latestRoundData() returns (
-            uint80 /*roundId*/,
+            uint80, /*roundId*/
             int answer,
-            uint /*startedAt*/,
+            uint, /*startedAt*/
             uint updatedAt,
             uint80 /*answeredInRound*/
         ) {
@@ -253,7 +253,9 @@ contract Aggor is IAggor, Auth, Toll {
             }
 
             // Fail if answer stale or not in [1, type(uint128).max].
-            if (isStale || answer <= 0 || uint(answer) > uint(type(uint128).max)) {
+            if (
+                isStale || answer <= 0 || uint(answer) > uint(type(uint128).max)
+            ) {
                 return (false, 0);
             }
 
