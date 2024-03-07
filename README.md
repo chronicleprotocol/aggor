@@ -1,7 +1,8 @@
-![](./assets/title.png)
+<img src="./assets/logo.png"/>
+
 [![Unit Tests](https://github.com/chronicleprotocol/aggor/actions/workflows/unit-tests.yml/badge.svg)](https://github.com/chronicleprotocol/aggor/actions/workflows/unit-tests.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-The Aggor oracle provides an oracle value based on multiple sources. It enables distributing trust among different oracle providers.
+Aggor is an oracle aggregator providing distributing trust among different oracle providers. For more info, see [docs/Aggor.md](./docs/Aggor.md).
 
 ## Installation
 
@@ -36,14 +37,6 @@ Lint:
 ```bash
 $ forge fmt [--check]
 ```
-
-Update gas snapshots:
-
-```bash
-$ forge snapshot --nmt "Fuzz|Integration" [--check]
-```
-
-To deploy see [Deployment docs](docs/Deployment.md).
 
 ## Dependencies
 
