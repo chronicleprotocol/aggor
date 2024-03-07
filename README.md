@@ -2,7 +2,7 @@
 
 [![Unit Tests](https://github.com/chronicleprotocol/aggor/actions/workflows/unit-tests.yml/badge.svg)](https://github.com/chronicleprotocol/aggor/actions/workflows/unit-tests.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Aggor is an oracle aggregator providing distributing trust among different oracle providers. For more info, see [docs/Aggor.md](./docs/Aggor.md).
+Aggor is an oracle aggregator distributing trust among different oracle providers. For more info, see [docs/Aggor.md](./docs/Aggor.md).
 
 ## Installation
 
