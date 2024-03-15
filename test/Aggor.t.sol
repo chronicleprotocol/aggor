@@ -536,7 +536,7 @@ contract AggorTest is Test {
         _checkReadFunctions(wantVal, wantAge, wantStatus);
     }
 
-    function testFuzz_read_ChronicleNotOk_ChainlinkNotOk_TwapOk() public {
+    function test_read_ChronicleNotOk_ChainlinkNotOk_TwapOk() public {
         // Let Chronicle's and Chainlink's val be not ok.
         // Use timestamp of zero to make vals stale.
         ChronicleMock(chronicle).setValAndAge(1, 0);
@@ -549,7 +549,7 @@ contract AggorTest is Test {
         _checkReadFunctions(wantVal, wantAge, wantStatus);
     }
 
-    function testFuzz_read_ChronicleNotOk_ChainlinkNotOk_TwapNotOk() public {
+    function test_read_ChronicleNotOk_ChainlinkNotOk_TwapNotOk() public {
         // Let Chronicle's and Chainlink's val be not ok.
         // Use timestamp of zero to make vals stale.
         ChronicleMock(chronicle).setValAndAge(1, 0);
