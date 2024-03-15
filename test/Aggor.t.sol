@@ -332,8 +332,8 @@ contract AggorTest is Test {
         vm.assume(val < type(uint128).max / 10 ** 18);
 
         // Scale val to oracles' decimals.
-        uint valChr = val * 10 ** 18;
-        uint valChl = val * 10 ** 8;
+        uint valChr = val * 1e18;
+        uint valChl = val * 1e8;
 
         // Let Chainlink's val have some % difference to Chronicles.
         // Note to keep vals in agreement distance.
@@ -350,7 +350,7 @@ contract AggorTest is Test {
 
         // Compute expected value.
         // Note to scale Chronicle's val down to Chainlik's decimals.
-        uint wantVal = ((valChr / 10 ** 10) + valChl) / 2;
+        uint wantVal = ((valChr / 1e10) + valChl) / 2;
 
         uint wantAge = block.timestamp;
         IAggor.Status memory wantStatus =
@@ -358,15 +358,121 @@ contract AggorTest is Test {
         _checkReadFunctions(wantVal, wantAge, wantStatus);
     }
 
+    function test_read_ChronicleOk_ChainlinkOk_InAgreementDistance_ExcplicitBoundaryChecks(
+    ) public {
+        // Note that the %-difference is defined from the bigger value.
+        IAggor.Status memory wantStatus;
+        IAggor.Status memory gotStatus;
+
+        uint128 valChr;
+        uint128 valChl;
+
+        // -- Test: Chronicle upper boundary
+        valChr = 100 * 1e18;
+        valChl = 100 * 1e8;
+
+        // 111 - 10% < 100 -> (111, 100) in agreement distance
+        valChr += 11 * 1e18;
+        ChronicleMock(chronicle).setValAndAge(valChr, block.timestamp);
+        ChainlinkMock(chainlink).setValAndAge(
+            int(uint(valChl)), block.timestamp
+        );
+        wantStatus = IAggor.Status({path: 2, goodOracleCtr: 2});
+        (,, gotStatus) = aggor.readWithStatus();
+        assertEq(wantStatus.path, gotStatus.path);
+        assertEq(wantStatus.goodOracleCtr, gotStatus.goodOracleCtr);
+
+        // 112 - 10% > 100 -> (112, 100) not in agreement distance
+        valChr += 1 * 1e18;
+        ChronicleMock(chronicle).setValAndAge(valChr, block.timestamp);
+        wantStatus = IAggor.Status({path: 3, goodOracleCtr: 2});
+        (,, gotStatus) = aggor.readWithStatus();
+        assertEq(wantStatus.path, gotStatus.path);
+        assertEq(wantStatus.goodOracleCtr, gotStatus.goodOracleCtr);
+
+        // -- Test: Chronicle lower boundary
+        valChr = 100 * 1e18;
+        valChl = 100 * 1e8;
+
+        // 100 - 10% = 90 -> (90, 100) in agreement distance
+        valChr -= 10 * 1e18;
+        ChronicleMock(chronicle).setValAndAge(valChr, block.timestamp);
+        ChainlinkMock(chainlink).setValAndAge(
+            int(uint(valChl)), block.timestamp
+        );
+        wantStatus = IAggor.Status({path: 2, goodOracleCtr: 2});
+        (,, gotStatus) = aggor.readWithStatus();
+        assertEq(wantStatus.path, gotStatus.path);
+        assertEq(wantStatus.goodOracleCtr, gotStatus.goodOracleCtr);
+
+        // 100 - 10% = 90 -> (89, 100) not in agreement distance
+        valChr -= 1 * 1e18;
+        ChronicleMock(chronicle).setValAndAge(valChr, block.timestamp);
+        wantStatus = IAggor.Status({path: 3, goodOracleCtr: 2});
+        (,, gotStatus) = aggor.readWithStatus();
+        assertEq(wantStatus.path, gotStatus.path);
+        assertEq(wantStatus.goodOracleCtr, gotStatus.goodOracleCtr);
+
+        // -- Test: Chainlink upper boundary
+        valChr = 100 * 1e18;
+        valChl = 100 * 1e8;
+
+        // 111 - 10% < 100 -> (100, 111) in agreement distance
+        valChl += 11 * 1e8;
+        ChronicleMock(chronicle).setValAndAge(valChr, block.timestamp);
+        ChainlinkMock(chainlink).setValAndAge(
+            int(uint(valChl)), block.timestamp
+        );
+        wantStatus = IAggor.Status({path: 2, goodOracleCtr: 2});
+        (,, gotStatus) = aggor.readWithStatus();
+        assertEq(wantStatus.path, gotStatus.path);
+        assertEq(wantStatus.goodOracleCtr, gotStatus.goodOracleCtr);
+
+        // 112 - 10% > 100 -> (100, 112) not in agreement distance
+        valChl += 1 * 1e8;
+        ChainlinkMock(chainlink).setValAndAge(
+            int(uint(valChl)), block.timestamp
+        );
+        wantStatus = IAggor.Status({path: 3, goodOracleCtr: 2});
+        (,, gotStatus) = aggor.readWithStatus();
+        assertEq(wantStatus.path, gotStatus.path);
+        assertEq(wantStatus.goodOracleCtr, gotStatus.goodOracleCtr);
+
+        // -- Test: Chainlink lower boundary
+        valChr = 100 * 1e18;
+        valChl = 100 * 1e8;
+
+        // 100 - 10% = 90 -> (100, 90) in agreement distance
+        valChl -= 10 * 1e8;
+        ChronicleMock(chronicle).setValAndAge(valChr, block.timestamp);
+        ChainlinkMock(chainlink).setValAndAge(
+            int(uint(valChl)), block.timestamp
+        );
+        wantStatus = IAggor.Status({path: 2, goodOracleCtr: 2});
+        (,, gotStatus) = aggor.readWithStatus();
+        assertEq(wantStatus.path, gotStatus.path);
+        assertEq(wantStatus.goodOracleCtr, gotStatus.goodOracleCtr);
+
+        // 100 - 10% = 90 -> (100, 89) not in agreement distance
+        valChl -= 1 * 1e8;
+        ChainlinkMock(chainlink).setValAndAge(
+            int(uint(valChl)), block.timestamp
+        );
+        wantStatus = IAggor.Status({path: 3, goodOracleCtr: 2});
+        (,, gotStatus) = aggor.readWithStatus();
+        assertEq(wantStatus.path, gotStatus.path);
+        assertEq(wantStatus.goodOracleCtr, gotStatus.goodOracleCtr);
+    }
+
     function testFuzz_read_ChronicleOk_ChainlinkOk_NotInAgreementDistance_TwapOk(
         uint128 val,
         bool diffDirection
     ) public {
-        val = uint128(_bound(val, 1, type(uint128).max / 10 ** 18));
+        val = uint128(_bound(val, 1, type(uint128).max / 1e18));
 
         // Scale val to oracles' decimals.
-        uint valChr = val * 10 ** 18;
-        uint valChl = val * 10 ** 8;
+        uint valChr = val * 1e18;
+        uint valChl = val * 1e8;
 
         // Let values be outside of agreement distance.
         valChl = diffDirection ? 2 * valChl : valChl / 2;
@@ -380,7 +486,7 @@ contract AggorTest is Test {
         // Expect val is median(valChr, valChl, valTwap)
         // Note to scale Chronicle's val down to Chainlik's decimals.
         uint wantVal = LibMedian.median(
-            uint128(valChr / 10 ** 10), uint128(valChl), uint128(valTwap)
+            uint128(valChr / 1e10), uint128(valChl), uint128(valTwap)
         );
 
         uint wantAge = block.timestamp;
@@ -393,11 +499,11 @@ contract AggorTest is Test {
         uint128 val,
         bool diffDirection
     ) public {
-        val = uint128(_bound(val, 1, type(uint128).max / 10 ** 18));
+        val = uint128(_bound(val, 1, type(uint128).max / 1e18));
 
         // Scale val to oracles' decimals.
-        uint valChr = val * 10 ** 18;
-        uint valChl = val * 10 ** 8;
+        uint valChr = val * 1e18;
+        uint valChl = val * 1e8;
 
         // Let values be outside of agreement distance.
         valChl = diffDirection ? 2 * valChl : valChl / 2;
@@ -424,18 +530,18 @@ contract AggorTest is Test {
         int valChl
     ) public {
         vm.assume(valChr != 0);
-        vm.assume(valChr < type(uint128).max / 10 ** 18);
+        vm.assume(valChr < type(uint128).max / 1e18);
         vm.assume(valChl < 0);
 
         // Scale Chronicle's val to 18 decimals.
-        valChr *= 10 ** 18;
+        valChr *= 1e18;
 
         // Set vals.
         ChronicleMock(chronicle).setValAndAge(valChr, block.timestamp);
         ChainlinkMock(chainlink).setValAndAge(int(valChl), block.timestamp);
 
         // Expect only Chronicle's val, scaled down to 8 decimals.
-        uint wantVal = uint(valChr) / 10 ** 10;
+        uint wantVal = uint(valChr) / 1e10;
 
         uint wantAge = block.timestamp;
         IAggor.Status memory wantStatus =
@@ -448,18 +554,18 @@ contract AggorTest is Test {
         int valChl
     ) public {
         vm.assume(valChr != 0);
-        vm.assume(valChr < type(uint128).max / 10 ** 18);
+        vm.assume(valChr < type(uint128).max / 1e18);
         vm.assume(uint(valChl) > type(uint128).max);
 
         // Scale Chronicle's val to 18 decimals.
-        valChr *= 10 ** 18;
+        valChr *= 1e18;
 
         // Set vals.
         ChronicleMock(chronicle).setValAndAge(valChr, block.timestamp);
         ChainlinkMock(chainlink).setValAndAge(int(valChl), block.timestamp);
 
         // Expect only Chronicle's val, scaled down to 8 decimals.
-        uint wantVal = uint(valChr) / 10 ** 10;
+        uint wantVal = uint(valChr) / 1e10;
 
         uint wantAge = block.timestamp;
         IAggor.Status memory wantStatus =
@@ -467,15 +573,45 @@ contract AggorTest is Test {
         _checkReadFunctions(wantVal, wantAge, wantStatus);
     }
 
+    function test_read_ChronicleOk_ChainlinkNotOk_ValOverflow_ExplicitBoundaryCheck(
+    ) public {
+        IAggor.Status memory wantStatus;
+        IAggor.Status memory gotStatus;
+
+        // Let both oracle have some valid value.
+        // However, let chainlink's val be the max valid val.
+        uint128 valChr = 1e18;
+        uint valChl = type(uint128).max;
+
+        ChronicleMock(chronicle).setValAndAge(valChr, block.timestamp);
+        ChainlinkMock(chainlink).setValAndAge(int(valChl), block.timestamp);
+
+        // Expect both oracles to be valid (but not in agreement distance).
+        wantStatus = IAggor.Status({path: 3, goodOracleCtr: 2});
+        (,, gotStatus) = aggor.readWithStatus();
+        assertEq(wantStatus.path, gotStatus.path);
+        assertEq(wantStatus.goodOracleCtr, gotStatus.goodOracleCtr);
+
+        // Let chainlink's val be invalid due to overflow.
+        valChl += 1;
+        ChainlinkMock(chainlink).setValAndAge(int(valChl), block.timestamp);
+
+        // Expect only chronicle oracle to be valid.
+        wantStatus = IAggor.Status({path: 4, goodOracleCtr: 1});
+        (,, gotStatus) = aggor.readWithStatus();
+        assertEq(wantStatus.path, gotStatus.path);
+        assertEq(wantStatus.goodOracleCtr, gotStatus.goodOracleCtr);
+    }
+
     function testFuzz_read_ChronicleOk_ChainlinkNotOk_ValStale(
         uint128 valChr,
         uint128 valChl
     ) public {
         vm.assume(valChr != 0);
-        vm.assume(valChr < type(uint128).max / 10 ** 18);
+        vm.assume(valChr < type(uint128).max / 1e18);
 
         // Scale Chronicle's val to 18 decimals.
-        valChr *= 10 ** 18;
+        valChr *= 1e18;
 
         // Set vals.
         ChronicleMock(chronicle).setValAndAge(valChr, block.timestamp);
@@ -483,12 +619,46 @@ contract AggorTest is Test {
         ChainlinkMock(chainlink).setValAndAge(int(uint(valChl)), 0);
 
         // Expect only Chronicle's val, scaled down to 8 decimals.
-        uint wantVal = uint(valChr) / 10 ** 10;
+        uint wantVal = uint(valChr) / 1e10;
 
         uint wantAge = block.timestamp;
         IAggor.Status memory wantStatus =
             IAggor.Status({path: 4, goodOracleCtr: 1});
         _checkReadFunctions(wantVal, wantAge, wantStatus);
+    }
+
+    function test_read_ChronicleOk_ChainlinkNotOk_ValStale_ExplicitBoundaryCheck(
+    ) public {
+        IAggor.Status memory wantStatus;
+        IAggor.Status memory gotStatus;
+
+        // Let both oracles have some valid value.
+        uint128 valChr = 100 * 1e18;
+        uint128 valChl = 100 * 1e8;
+
+        // Let both oracle be non-stale.
+        // However, let chainlink's age be the oldest still valid age.
+        uint ageChr = block.timestamp;
+        uint ageChl = block.timestamp - ageThreshold;
+
+        ChronicleMock(chronicle).setValAndAge(valChr, ageChr);
+        ChainlinkMock(chainlink).setValAndAge(int(uint(valChl)), ageChl);
+
+        // Expect both oracles to be valid (and in agreement distance).
+        wantStatus = IAggor.Status({path: 2, goodOracleCtr: 2});
+        (,, gotStatus) = aggor.readWithStatus();
+        assertEq(wantStatus.path, gotStatus.path);
+        assertEq(wantStatus.goodOracleCtr, gotStatus.goodOracleCtr);
+
+        // Let chainlink's value be stale.
+        ageChl -= 1;
+        ChainlinkMock(chainlink).setValAndAge(int(uint(valChl)), ageChl);
+
+        // Expect only chronicle oracle to be valid.
+        wantStatus = IAggor.Status({path: 4, goodOracleCtr: 1});
+        (,, gotStatus) = aggor.readWithStatus();
+        assertEq(wantStatus.path, gotStatus.path);
+        assertEq(wantStatus.goodOracleCtr, gotStatus.goodOracleCtr);
     }
 
     function testFuzz_read_ChronicleNotOk_ChainlinkOk(
@@ -534,6 +704,40 @@ contract AggorTest is Test {
         IAggor.Status memory wantStatus =
             IAggor.Status({path: 4, goodOracleCtr: 1});
         _checkReadFunctions(wantVal, wantAge, wantStatus);
+    }
+
+    function test_read_ChronicleNotOk_ChainlinkOk_ValStale_ExplicitBoundaryCheck(
+    ) public {
+        IAggor.Status memory wantStatus;
+        IAggor.Status memory gotStatus;
+
+        // Let both oracles have some valid value.
+        uint128 valChr = 100 * 1e18;
+        uint128 valChl = 100 * 1e8;
+
+        // Let both oracle be non-stale.
+        // However, let chronicles's age be the oldest still valid age.
+        uint ageChr = block.timestamp - ageThreshold;
+        uint ageChl = block.timestamp;
+
+        ChronicleMock(chronicle).setValAndAge(valChr, ageChr);
+        ChainlinkMock(chainlink).setValAndAge(int(uint(valChl)), ageChl);
+
+        // Expect both oracles to be valid (and in agreement distance).
+        wantStatus = IAggor.Status({path: 2, goodOracleCtr: 2});
+        (,, gotStatus) = aggor.readWithStatus();
+        assertEq(wantStatus.path, gotStatus.path);
+        assertEq(wantStatus.goodOracleCtr, gotStatus.goodOracleCtr);
+
+        // Let chronicle's value be stale.
+        ageChr -= 1;
+        ChronicleMock(chronicle).setValAndAge(valChr, ageChr);
+
+        // Expect only chainlink oracle to be valid.
+        wantStatus = IAggor.Status({path: 4, goodOracleCtr: 1});
+        (,, gotStatus) = aggor.readWithStatus();
+        assertEq(wantStatus.path, gotStatus.path);
+        assertEq(wantStatus.goodOracleCtr, gotStatus.goodOracleCtr);
     }
 
     function test_read_ChronicleNotOk_ChainlinkNotOk_TwapOk() public {
@@ -589,6 +793,14 @@ contract AggorTest is Test {
 
         vm.expectRevert();
         aggor.setAgreementDistance(agreementDistance_);
+    }
+
+    function test_setAgreementDistance_RevertsIf_AgreementDistanceMoreThan1Wad_ExplicitBoundaryCheck(
+    ) public {
+        vm.expectRevert();
+        aggor.setAgreementDistance(1e18 + 1);
+
+        aggor.setAgreementDistance(1e18);
     }
 
     function test_setAgreementDistance_IsAuthProtected() public {
