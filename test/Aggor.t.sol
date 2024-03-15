@@ -95,7 +95,7 @@ contract AggorTest is Test {
     function test_Deployment_FailsIf_UniswapPoolZeroAddress() public {
         uint8 decimals = IERC20(uniswapBaseToken).decimals();
 
-        vm.expectRevert();
+        vm.expectRevert("Uniswap pool must not be zero");
         new Aggor(
             address(this),
             chronicle,
@@ -109,7 +109,7 @@ contract AggorTest is Test {
             ageThreshold
         );
 
-        vm.expectRevert();
+        vm.expectRevert("Uniswap pool must not be zero");
         aggor_VerifyTwapConfig.verifyTwapConfig(
             address(0), // <- !
             uniswapBaseToken,
@@ -122,7 +122,7 @@ contract AggorTest is Test {
     function test_Deployment_FailsIf_BaseTokenEqualsQuoteToken() public {
         uint8 decimals = IERC20(uniswapBaseToken).decimals();
 
-        vm.expectRevert();
+        vm.expectRevert("Uniswap tokens must not be equal");
         new Aggor(
             address(this),
             chronicle,
@@ -136,7 +136,7 @@ contract AggorTest is Test {
             ageThreshold
         );
 
-        vm.expectRevert();
+        vm.expectRevert("Uniswap tokens must not be equal");
         aggor_VerifyTwapConfig.verifyTwapConfig(
             uniswapPool,
             uniswapBaseToken,
@@ -150,7 +150,7 @@ contract AggorTest is Test {
         address notPoolToken = address(new ERC20Mock("", "", 18));
         uint8 decimals = IERC20(notPoolToken).decimals();
 
-        vm.expectRevert();
+        vm.expectRevert("Uniswap base token mismatch");
         new Aggor(
             address(this),
             chronicle,
@@ -164,7 +164,7 @@ contract AggorTest is Test {
             ageThreshold
         );
 
-        vm.expectRevert();
+        vm.expectRevert("Uniswap base token mismatch");
         aggor_VerifyTwapConfig.verifyTwapConfig(
             uniswapPool,
             notPoolToken, // <- !
@@ -178,7 +178,7 @@ contract AggorTest is Test {
         address notPoolToken = address(new ERC20Mock("", "", 18));
         uint8 decimals = IERC20(uniswapBaseToken).decimals();
 
-        vm.expectRevert();
+        vm.expectRevert("Uniswap quote token mismatch");
         new Aggor(
             address(this),
             chronicle,
@@ -192,7 +192,7 @@ contract AggorTest is Test {
             ageThreshold
         );
 
-        vm.expectRevert();
+        vm.expectRevert("Uniswap quote token mismatch");
         aggor_VerifyTwapConfig.verifyTwapConfig(
             uniswapPool,
             uniswapBaseToken,
@@ -205,7 +205,7 @@ contract AggorTest is Test {
     function test_Deployment_FailsIf_BaseTokenDecimalsWrong() public {
         uint8 decimals = IERC20(uniswapBaseToken).decimals();
 
-        vm.expectRevert();
+        vm.expectRevert("Uniswap base token decimals mismatch");
         new Aggor(
             address(this),
             chronicle,
@@ -219,7 +219,7 @@ contract AggorTest is Test {
             ageThreshold
         );
 
-        vm.expectRevert();
+        vm.expectRevert("Uniswap base token decimals mismatch");
         aggor_VerifyTwapConfig.verifyTwapConfig(
             uniswapPool,
             uniswapBaseToken,
@@ -236,7 +236,7 @@ contract AggorTest is Test {
 
         UniswapPoolMock(uniswapPool).setToken0(uniswapBaseToken);
 
-        vm.expectRevert();
+        vm.expectRevert("Uniswap base token decimals too high");
         new Aggor(
             address(this),
             chronicle,
@@ -250,7 +250,7 @@ contract AggorTest is Test {
             ageThreshold
         );
 
-        vm.expectRevert();
+        vm.expectRevert("Uniswap base token decimals too high");
         aggor_VerifyTwapConfig.verifyTwapConfig(
             uniswapPool,
             uniswapBaseToken,
@@ -264,7 +264,7 @@ contract AggorTest is Test {
     ) public {
         uint8 decimals = IERC20(uniswapBaseToken).decimals();
 
-        vm.expectRevert();
+        vm.expectRevert("Uniswap lookback too high");
         new Aggor(
             address(this),
             chronicle,
@@ -278,7 +278,7 @@ contract AggorTest is Test {
             ageThreshold
         );
 
-        vm.expectRevert();
+        vm.expectRevert("Uniswap lookback too high");
         aggor_VerifyTwapConfig.verifyTwapConfig(
             uniswapPool,
             uniswapBaseToken,

@@ -20,8 +20,10 @@ import {LibMedian} from "./libs/LibMedian.sol";
 /**
  * @title Aggor
  *
- * @notice Aggor combines oracle values from multiple providers into a single
- *         value
+ * @notice Oracle aggregator distributing trust among different oracle providers
+ *
+ * @author Chronicle Labs, Inc
+ * @custom:security-contact security@chroniclelabs.org
  */
 contract Aggor is IAggor, Auth, Toll {
     using LibUniswapOracles for address;
@@ -112,27 +114,42 @@ contract Aggor is IAggor, Auth, Toll {
         uint8 uniswapBaseTokenDecimals_,
         uint32 uniswapLookback_
     ) internal view {
-        require(uniswapPool_ != address(0));
+        require(uniswapPool_ != address(0), "Uniswap pool must not be zero");
 
         address token0 = IUniswapV3Pool(uniswapPool_).token0();
         address token1 = IUniswapV3Pool(uniswapPool_).token1();
 
         // Verify base and quote tokens.
-        require(uniswapBaseToken_ != uniswapQuoteToken_);
-        require(uniswapBaseToken_ == token0 || uniswapBaseToken_ == token1);
-        require(uniswapQuoteToken_ == token0 || uniswapQuoteToken_ == token1);
+        require(
+            uniswapBaseToken_ != uniswapQuoteToken_,
+            "Uniswap tokens must not be equal"
+        );
+        require(
+            uniswapBaseToken_ == token0 || uniswapBaseToken_ == token1,
+            "Uniswap base token mismatch"
+        );
+        require(
+            uniswapQuoteToken_ == token0 || uniswapQuoteToken_ == token1,
+            "Uniswap quote token mismatch"
+        );
 
         // Verify base token's decimals.
         require(
-            uniswapBaseTokenDecimals_ == IERC20(uniswapBaseToken_).decimals()
+            uniswapBaseTokenDecimals_ == IERC20(uniswapBaseToken_).decimals(),
+            "Uniswap base token decimals mismatch"
         );
-        require(uniswapBaseTokenDecimals_ <= _MAX_UNISWAP_BASE_DECIMALS);
+        require(
+            uniswapBaseTokenDecimals_ <= _MAX_UNISWAP_BASE_DECIMALS,
+            "Uniswap base token decimals too high"
+        );
 
         // Verify TWAP is initialized.
         // Specifically, verify that the TWAP's oldest observation is older
         // then the uniswapLookback argument.
         uint32 oldestObservation = uniswapPool_.getOldestObservationSecondsAgo();
-        require(oldestObservation > uniswapLookback_);
+        require(
+            oldestObservation > uniswapLookback_, "Uniswap lookback too high"
+        );
     }
 
     // -- Read Functionality --
