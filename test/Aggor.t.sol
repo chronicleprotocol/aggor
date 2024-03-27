@@ -746,6 +746,24 @@ contract AggorTest is Test {
         assertEq(wantStatus.goodOracleCtr, gotStatus.goodOracleCtr);
     }
 
+    function test_read_ChronicleNotOk_ChainlinkOk_NotTolled() public {
+        // Let aggor not be toll'ed on Chronicle.
+        ChronicleMock(chronicle).setTolled(false);
+
+        // Set Chainlink's val.
+        ChainlinkMock(chainlink).setValAndAge(
+            int(uint(type(uint128).max)), block.timestamp
+        );
+
+        // Expect only Chainlink's val.
+        uint wantVal = uint(type(uint128).max);
+
+        uint wantAge = block.timestamp;
+        IAggor.Status memory wantStatus =
+            IAggor.Status({path: 4, goodOracleCtr: 1});
+        _checkReadFunctions(wantVal, wantAge, wantStatus);
+    }
+
     function test_read_ChronicleNotOk_ChainlinkNotOk_TwapOk() public {
         // Let Chronicle's and Chainlink's val be not ok.
         // Use timestamp of zero to make vals stale.
