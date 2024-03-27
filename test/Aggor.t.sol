@@ -51,6 +51,7 @@ contract AggorTest is Test {
         // Deploy aggor.
         aggor = new Aggor(
             address(this),
+            address(this),
             chronicle,
             chainlink,
             uniswapPool,
@@ -62,12 +63,10 @@ contract AggorTest is Test {
             ageThreshold
         );
 
-        // Note to kiss address(this) on aggor.
-        aggor.kiss(address(this));
-
         // Note to also deploy an Aggor with the constructor's
         // `_verifyTwapConfig()` function exposed.
         aggor_VerifyTwapConfig = new Aggor_VerifyTwapConfig(
+            address(this),
             address(this),
             chronicle,
             chainlink,
@@ -98,6 +97,7 @@ contract AggorTest is Test {
         vm.expectRevert("Uniswap pool must not be zero");
         new Aggor(
             address(this),
+            address(this),
             chronicle,
             chainlink,
             address(0), // <- !
@@ -124,6 +124,7 @@ contract AggorTest is Test {
 
         vm.expectRevert("Uniswap tokens must not be equal");
         new Aggor(
+            address(this),
             address(this),
             chronicle,
             chainlink,
@@ -153,6 +154,7 @@ contract AggorTest is Test {
         vm.expectRevert("Uniswap base token mismatch");
         new Aggor(
             address(this),
+            address(this),
             chronicle,
             chainlink,
             uniswapPool,
@@ -181,6 +183,7 @@ contract AggorTest is Test {
         vm.expectRevert("Uniswap quote token mismatch");
         new Aggor(
             address(this),
+            address(this),
             chronicle,
             chainlink,
             uniswapPool,
@@ -207,6 +210,7 @@ contract AggorTest is Test {
 
         vm.expectRevert("Uniswap base token decimals mismatch");
         new Aggor(
+            address(this),
             address(this),
             chronicle,
             chainlink,
@@ -239,6 +243,7 @@ contract AggorTest is Test {
         vm.expectRevert("Uniswap base token decimals too high");
         new Aggor(
             address(this),
+            address(this),
             chronicle,
             chainlink,
             uniswapPool,
@@ -266,6 +271,7 @@ contract AggorTest is Test {
 
         vm.expectRevert("Uniswap lookback too high");
         new Aggor(
+            address(this),
             address(this),
             chronicle,
             chainlink,
@@ -835,6 +841,60 @@ contract AggorTest is Test {
         aggor.setAgeThreshold(1);
     }
 
+    // -- Toll'ed Functionality --
+
+    function test_latestRoundData_IsTollProtected() public {
+        vm.prank(address(0xbeef));
+        vm.expectRevert(
+            abi.encodeWithSelector(IToll.NotTolled.selector, address(0xbeef))
+        );
+        aggor.latestRoundData();
+    }
+
+    function test_latestAnswer_IsTollProtected() public {
+        vm.prank(address(0xbeef));
+        vm.expectRevert(
+            abi.encodeWithSelector(IToll.NotTolled.selector, address(0xbeef))
+        );
+        aggor.latestAnswer();
+    }
+
+    function test_readWithStatus_IsTollProtected() public {
+        vm.prank(address(0xbeef));
+        vm.expectRevert(
+            abi.encodeWithSelector(IToll.NotTolled.selector, address(0xbeef))
+        );
+        aggor.readWithStatus();
+    }
+
+    // -- IToll Functionality --
+
+    function test_kiss_IsDisabled() public {
+        vm.expectRevert();
+        aggor.kiss(address(0xbeef));
+    }
+
+    function test_diss_IsDisabled() public {
+        vm.expectRevert();
+        aggor.diss(address(0xbeef));
+    }
+
+    function test_tolled_OnlyBudAndZeroAddress() public {
+        // Check via tolled(address)(bool).
+        assertTrue(aggor.tolled(address(0)));
+        assertTrue(aggor.tolled(address(this)));
+
+        // Check via tolled()(address[]).
+        address[] memory tolled = aggor.tolled();
+        assertEq(tolled.length, 2);
+        assertEq(tolled[0], address(0));
+        assertEq(tolled[1], address(this));
+
+        // Check via bud(address)(uint).
+        assertEq(aggor.bud(address(0)), 1);
+        assertEq(aggor.bud(address(this)), 1);
+    }
+
     // -- Internal Helpers --
 
     function _setTwapNotOk() public {
@@ -846,6 +906,7 @@ contract AggorTest is Test {
 contract Aggor_VerifyTwapConfig is Aggor {
     constructor(
         address initialAuthed,
+        address bud_,
         address chronicle_,
         address chainlink_,
         address uniswapPool_,
@@ -858,6 +919,7 @@ contract Aggor_VerifyTwapConfig is Aggor {
     )
         Aggor(
             initialAuthed,
+            bud_,
             chronicle_,
             chainlink_,
             uniswapPool_,

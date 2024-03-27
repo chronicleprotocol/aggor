@@ -52,6 +52,7 @@ contract AggorIntegrationTest_eth_ETH_USD is Test {
         // Deploy aggor.
         aggor = new Aggor(
             address(this),
+            address(this),
             chronicle,
             chainlink,
             uniswapPool,
