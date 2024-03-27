@@ -2,7 +2,7 @@
 pragma solidity ^0.8.16;
 
 import {Auth} from "chronicle-std/auth/Auth.sol";
-import {Toll} from "chronicle-std/toll/Toll.sol";
+import {IToll} from "chronicle-std/toll/IToll.sol";
 
 import {IChronicle} from "chronicle-std/IChronicle.sol";
 import {IChainlinkAggregatorV3} from
@@ -22,10 +22,17 @@ import {LibMedian} from "./libs/LibMedian.sol";
  *
  * @notice Oracle aggregator distributing trust among different oracle providers
  *
+ * @dev While Chronicle oracle's normaly use the chronicle-std/Toll module for
+ *      access controlling the read functions this implementation uses a
+ *      non-configurable, inlined, approach. Two addresses are granted read access,
+ *      the zero address and `_bud` being an immutable set during deployment.
+ *
+ *      Nevertheless, the full IToll interface is implemented to ensure compatibility.
+ *
  * @author Chronicle Labs, Inc
  * @custom:security-contact security@chroniclelabs.org
  */
-contract Aggor is IAggor, Auth, Toll {
+contract Aggor is IAggor, IToll, Auth {
     using LibUniswapOracles for address;
 
     // -- Internal Constants --
@@ -42,6 +49,11 @@ contract Aggor is IAggor, Auth, Toll {
 
     /// @inheritdoc IAggor
     uint8 public constant decimals = 8;
+
+    // -- Toll
+
+    /// @dev Bud is the only non-zero address receiving toll.
+    address internal immutable _bud;
 
     // -- Oracles
 
@@ -70,10 +82,20 @@ contract Aggor is IAggor, Auth, Toll {
     /// @inheritdoc IAggor
     uint32 public ageThreshold;
 
+    // -- Modifier --
+
+    modifier toll() {
+        if (msg.sender != _bud && msg.sender != address(0)) {
+            revert NotTolled(msg.sender);
+        }
+        _;
+    }
+
     // -- Constructor --
 
     constructor(
         address initialAuthed,
+        address bud_,
         address chronicle_,
         address chainlink_,
         address uniswapPool_,
@@ -94,6 +116,7 @@ contract Aggor is IAggor, Auth, Toll {
         );
 
         // Set immutables.
+        _bud = bud_;
         chronicle = chronicle_;
         chainlink = chainlink_;
         uniswapPool = uniswapPool_;
@@ -101,6 +124,12 @@ contract Aggor is IAggor, Auth, Toll {
         uniswapQuoteToken = uniswapQuoteToken_;
         uniswapBaseTokenDecimals = uniswapBaseTokenDecimals_;
         uniswapLookback = uniswapLookback_;
+
+        // Emit event indicating address(0) and _bud are tolled.
+        // Note to use address(0) as caller to indicate address was toll'ed
+        // during deployment.
+        emit TollGranted(address(0), address(0));
+        emit TollGranted(address(0), _bud);
 
         // Set configurations.
         _setAgreementDistance(agreementDistance_);
@@ -382,6 +411,41 @@ contract Aggor is IAggor, Auth, Toll {
         }
     }
 
+    // -- IToll Functionality --
+
+    /// @inheritdoc IToll
+    ///
+    /// @dev Function is disabled!
+    function kiss(address who) external view auth {
+        revert();
+    }
+
+    /// @inheritdoc IToll
+    ///
+    /// @dev Function is disabled!
+    function diss(address who) external view auth {
+        revert();
+    }
+
+    /// @inheritdoc IToll
+    function tolled(address who) public view returns (bool) {
+        return who == address(0) || who == _bud;
+    }
+
+    /// @inheritdoc IToll
+    function tolled() external view returns (address[] memory) {
+        address[] memory result = new address[](2);
+        result[0] = address(0);
+        result[1] = _bud;
+
+        return result;
+    }
+
+    /// @inheritdoc IToll
+    function bud(address who) external view returns (uint) {
+        return tolled(who) ? 1 : 0;
+    }
+
     // -- Internal Helpers --
 
     function _inAgreementDistance(uint128 a, uint128 b)
@@ -395,11 +459,6 @@ contract Aggor is IAggor, Auth, Toll {
             return uint(a) * 1e18 >= agreementDistance * uint(b);
         }
     }
-
-    // -- Overridden Toll Functions --
-
-    /// @dev Defines authorization for IToll's authenticated functions.
-    function toll_auth() internal override(Toll) auth {}
 }
 
 /**
@@ -411,6 +470,7 @@ contract Aggor_BASE_QUOTE_COUNTER is Aggor {
     // @todo   ^^^^ ^^^^^ ^^^^^^^ Adjust name of Aggor instance
     constructor(
         address initialAuthed,
+        address oracle_,
         address chronicle_,
         address chainlink_,
         address uniswapPool_,
@@ -423,6 +483,7 @@ contract Aggor_BASE_QUOTE_COUNTER is Aggor {
     )
         Aggor(
             initialAuthed,
+            oracle_,
             chronicle_,
             chainlink_,
             uniswapPool_,
