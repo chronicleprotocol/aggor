@@ -67,9 +67,6 @@ contract AggorIntegrationTest_eth_ETH_USD is Test {
         // Kiss aggor on chronicle oracle.
         vm.prank(IAuth(chronicle).authed()[0]);
         IToll(chronicle).kiss(address(aggor));
-
-        // Kiss address(this) on aggor.
-        IToll(address(aggor)).kiss(address(this));
     }
 
     function _setChronicle(uint128 val, uint32 age) internal {
