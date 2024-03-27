@@ -52,7 +52,7 @@ contract Aggor is IAggor, IToll, Auth {
 
     // -- Toll
 
-    /// @dev Bud is the only non-zero address receiving toll.
+    /// @dev Bud is the only non-zero address being toll'ed.
     address internal immutable _bud;
 
     // -- Oracles
@@ -188,7 +188,7 @@ contract Aggor is IAggor, IToll, Auth {
     /// @dev Note that the value's age is always block.timestamp except if the
     ///      value itself is invalid.
     function _read() internal view returns (uint128, uint, Status memory) {
-        // Read chronicle and chainlink oracles.
+        // Read Chronicle and Chainlink oracles.
         (bool okChr, uint128 valChr) = _readChronicle();
         (bool okChl, uint128 valChl) = _readChainlink();
 
@@ -217,10 +217,10 @@ contract Aggor is IAggor, IToll, Auth {
 
             // Otherwise not possible to decide which oracle is ok.
         } else if (okChr) {
-            // If only chronicle ok, use chronicle's value.
+            // If only Chronicle ok, use Chronicle's value.
             return (valChr, age, Status({path: 4, goodOracleCtr: 1}));
         } else if (okChl) {
-            // If only chainlink ok, use chainlink's value.
+            // If only Chainlink ok, use Chainlink's value.
             return (valChl, age, Status({path: 4, goodOracleCtr: 1}));
         }
 
@@ -234,7 +234,7 @@ contract Aggor is IAggor, IToll, Auth {
         return (0, 0, Status({path: 6, goodOracleCtr: 0}));
     }
 
-    /// @dev Reads the chronicle oracle.
+    /// @dev Reads the Chronicle oracle.
     ///
     /// @dev Note that while chronicle uses 18 decimals, the returned value is
     ///      already scaled to `decimals`.
@@ -242,24 +242,31 @@ contract Aggor is IAggor, IToll, Auth {
     /// @return bool Whether oracle is ok.
     /// @return uint128 The oracle's val.
     function _readChronicle() internal view returns (bool, uint128) {
-        (bool ok, uint val, uint age) = IChronicle(chronicle).tryReadWithAge();
-        // assert(val <= type(uint128).max);
-        // assert(!ok || val != 0); // ok -> val != 0
-        // assert(age <= block.timestamp);
+        // Note that Chronicle's `try...` functions revert iff the caller is not
+        // toll'ed.
+        try IChronicle(chronicle).tryReadWithAge() returns (
+            bool ok, uint val, uint age
+        ) {
+            // assert(val <= type(uint128).max);
+            // assert(!ok || val != 0); // ok -> val != 0
+            // assert(age <= block.timestamp);
 
-        // Fail if not ok or value stale.
-        if (!ok || age + ageThreshold < block.timestamp) {
+            // Fail if not ok or value stale.
+            if (!ok || age + ageThreshold < block.timestamp) {
+                return (false, 0);
+            }
+
+            // Scale value down from Chronicle decimals to Aggor decimals.
+            // assert(_DECIMALS_CHRONICLES >= decimals).
+            val /= 10 ** (_DECIMALS_CHRONICLE - decimals);
+
+            return (true, uint128(val));
+        } catch {
             return (false, 0);
         }
-
-        // Scale value down from chronicle decimals to aggor decimals.
-        // assert(_DECIMALS_CHRONICLES >= decimals).
-        val /= 10 ** (_DECIMALS_CHRONICLE - decimals);
-
-        return (true, uint128(val));
     }
 
-    /// @dev Reads the chainlink oracle.
+    /// @dev Reads the Chainlink oracle.
     ///
     /// @return bool Whether oracle is ok.
     /// @return uint128 The oracle's val.
@@ -429,7 +436,7 @@ contract Aggor is IAggor, IToll, Auth {
 
     /// @inheritdoc IToll
     function tolled(address who) public view returns (bool) {
-        return who == address(0) || who == _bud;
+        return who == _bud || who == address(0);
     }
 
     /// @inheritdoc IToll

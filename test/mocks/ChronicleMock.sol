@@ -5,6 +5,7 @@ contract ChronicleMock {
     uint val;
     uint age;
     bool ok = true;
+    bool tolled = true;
 
     function setValAndAge(uint val_, uint age_) public {
         val = val_;
@@ -15,7 +16,13 @@ contract ChronicleMock {
         ok = ok_;
     }
 
+    function setTolled(bool tolled_) public {
+        tolled = tolled_;
+    }
+
     function tryReadWithAge() public view returns (bool, uint, uint) {
+        require(tolled);
+
         return (ok, val, age);
     }
 }
