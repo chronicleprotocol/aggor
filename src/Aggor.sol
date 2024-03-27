@@ -421,14 +421,12 @@ contract Aggor is IAggor, IToll, Auth {
     // -- IToll Functionality --
 
     /// @inheritdoc IToll
-    ///
     /// @dev Function is disabled!
     function kiss(address who) external view auth {
         revert();
     }
 
     /// @inheritdoc IToll
-    ///
     /// @dev Function is disabled!
     function diss(address who) external view auth {
         revert();
