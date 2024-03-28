@@ -423,19 +423,13 @@ contract Aggor is IAggor, IToll, Auth {
 
     /// @inheritdoc IToll
     /// @dev Function is disabled!
-    function kiss(address who) external view auth {
-        // No-op to silence compiler warnings.
-        require(who == address(0) || who != address(0));
-
+    function kiss(address /*who*/ ) external view auth {
         revert();
     }
 
     /// @inheritdoc IToll
     /// @dev Function is disabled!
-    function diss(address who) external view auth {
-        // No-op to silence compiler warnings.
-        require(who == address(0) || who != address(0));
-
+    function diss(address /*who*/ ) external view auth {
         revert();
     }
 
