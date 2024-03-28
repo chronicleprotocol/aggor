@@ -50,14 +50,11 @@ contract UniswapPoolMock {
         shouldOverflowUint128 = shouldOverflowUint128_;
     }
 
-    function observe(uint32[] memory secondsAgo)
+    function observe(uint32[] memory /*secondsAgo*/ )
         public
         view
         returns (int56[] memory, uint160[] memory)
     {
-        // No-op to silence compiler warnings.
-        require(secondsAgo.length != 0 || secondsAgo.length == 0);
-
         int56[] memory tickCumulatives = new int56[](2);
         uint160[] memory secondsPerLiquidityCumulativeX128s = new uint160[](2);
 
