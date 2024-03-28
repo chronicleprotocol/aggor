@@ -125,7 +125,7 @@ contract Aggor is IAggor, IToll, Auth {
         uniswapBaseTokenDecimals = uniswapBaseTokenDecimals_;
         uniswapLookback = uniswapLookback_;
 
-        // Emit event indicating address(0) and _bud are tolled.
+        // Emit events indicating address(0) and _bud are tolled.
         // Note to use address(0) as caller to indicate address was toll'ed
         // during deployment.
         emit TollGranted(address(0), address(0));
@@ -262,6 +262,7 @@ contract Aggor is IAggor, IToll, Auth {
 
             return (true, uint128(val));
         } catch {
+            // assert(!IToll(chronicle).tolled(address(this)));
             return (false, 0);
         }
     }
@@ -423,12 +424,18 @@ contract Aggor is IAggor, IToll, Auth {
     /// @inheritdoc IToll
     /// @dev Function is disabled!
     function kiss(address who) external view auth {
+        // No-op to silence compiler warnings.
+        require(who == address(0) || who != address(0));
+
         revert();
     }
 
     /// @inheritdoc IToll
     /// @dev Function is disabled!
     function diss(address who) external view auth {
+        // No-op to silence compiler warnings.
+        require(who == address(0) || who != address(0));
+
         revert();
     }
 
@@ -475,7 +482,7 @@ contract Aggor_BASE_QUOTE_COUNTER is Aggor {
     // @todo   ^^^^ ^^^^^ ^^^^^^^ Adjust name of Aggor instance
     constructor(
         address initialAuthed,
-        address oracle_,
+        address bud_,
         address chronicle_,
         address chainlink_,
         address uniswapPool_,
@@ -488,7 +495,7 @@ contract Aggor_BASE_QUOTE_COUNTER is Aggor {
     )
         Aggor(
             initialAuthed,
-            oracle_,
+            bud_,
             chronicle_,
             chainlink_,
             uniswapPool_,
