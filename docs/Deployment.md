@@ -30,6 +30,7 @@ $ env | grep -e "RPC_URL" -e "PRIVATE_KEY" -e "ETHERSCAN_API_URL" -e "ETHERSCAN_
 ## Configuration Setting
 
 The following variables inside `script/Aggor.s.sol` need to be set:
+- `bud`: The address allowed to read Aggor
 - `chronicle`: The Chronicle oracle
 - `chainlink`: The Chainlink oracle
 - `uniswapPool`: The Uniswap pool to use as TWAP
@@ -75,7 +76,7 @@ $ forge verify-contract \
     --etherscan-api-key "$ETHERSCAN_API_KEY" \
     --watch \
     --constructor-args \
-        "$(cast abi-encode "constructor(address,address,address,address,address,address,uint8,uint32,uint128,uint32)" \
-        "$INITIAL_AUTHED" "$CHRONICLE" "$CHAINLINK" "$UNISWAP_POOL" "$UNISWAP_BASE_TOKEN" "$UNISWAP_QUOTE_TOKEN" "$UNISWAP_BASE_TOKEN_DECIMALS" "$UNISWAP_LOOKBACK" "$AGREEMENT_DISTANCE" "$AGE_THRESHOLD")" \
+        "$(cast abi-encode "constructor(address,address,address,address,address,address,address,uint8,uint32,uint128,uint32)" \
+        "$INITIAL_AUTHED" "$BUD" "$CHRONICLE" "$CHAINLINK" "$UNISWAP_POOL" "$UNISWAP_BASE_TOKEN" "$UNISWAP_QUOTE_TOKEN" "$UNISWAP_BASE_TOKEN_DECIMALS" "$UNISWAP_LOOKBACK" "$AGREEMENT_DISTANCE" "$AGE_THRESHOLD")" \
     src/Aggor.sol:"$SALT"
 ```

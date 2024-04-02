@@ -20,6 +20,7 @@ contract AggorScript is Script {
 
     // -- Immutable
 
+    address bud;
     address chronicle;
     address chainlink;
     address uniswapPool;
@@ -46,6 +47,7 @@ contract AggorScript is Script {
             type(Aggor).creationCode,
             abi.encode(
                 initialAuthed,
+                bud,
                 chronicle,
                 chainlink,
                 uniswapPool,
