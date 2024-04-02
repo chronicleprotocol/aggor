@@ -12,8 +12,6 @@ This document describes how to manage deployed `Aggor` instances.
     - [`IAggor::setAgeThreshold`](#iaggorsetagethreshold)
     - [`IAuth::rely`](#iauthrely)
     - [`IAuth::deny`](#iauthdeny)
-    - [`IToll::kiss`](#itollkiss)
-    - [`IToll::diss`](#itolldiss)
 
 ## Environment Variables
 
@@ -105,38 +103,3 @@ $ forge script \
     script/Aggor.s.sol:AggorScript
 ```
 
-### `IToll::kiss`
-
-Set the following environment variables:
-
-- `WHO`: The address to grant toll to
-
-Run:
-
-```bash
-$ forge script \
-    --private-key $PRIVATE_KEY \
-    --broadcast \
-    --rpc-url $RPC_URL \
-    --sig $(cast calldata "kiss(address,address)" $SCRIBE $WHO) \
-    -vvv \
-    script/Aggor.s.sol:AggorScript
-```
-
-### `IToll::diss`
-
-Set the following environment variables:
-
-- `WHO`: The address to renounce toll from
-
-Run:
-
-```bash
-$ forge script \
-    --private-key $PRIVATE_KEY \
-    --broadcast \
-    --rpc-url $RPC_URL \
-    --sig $(cast calldata "diss(address,address)" $SCRIBE $WHO) \
-    -vvv \
-    script/Aggor.s.sol:AggorScript
-```
