@@ -187,6 +187,10 @@ contract Aggor is IAggor, IToll, Auth {
     ///
     /// @dev Note that the value's age is always block.timestamp except if the
     ///      value itself is invalid.
+    ///
+    /// @return uint128 Aggor's current value.
+    /// @return uint The value's age.
+    /// @return Status The status information.
     function _read() internal view returns (uint128, uint, Status memory) {
         // Read Chronicle and Chainlink oracles.
         (bool okChr, uint128 valChr) = _readChronicle();
