@@ -22,10 +22,10 @@ import {LibMedian} from "./libs/LibMedian.sol";
  *
  * @notice Oracle aggregator distributing trust among different oracle providers
  *
- * @dev While Chronicle oracle's normaly use the chronicle-std/Toll module for
- *      access controlling the read functions this implementation uses a
- *      non-configurable, inlined, approach. Two addresses are granted read access,
- *      the zero address and `_bud` being an immutable set during deployment.
+ * @dev While Chronicle oracles normally use the chronicle-std/Toll module for
+ *      access controlling read functions, this implementation adopts a
+ *      non-configurable, inlined approach. Two addresses are granted read access:
+ *      the zero address and `_bud`, which are immutably set during deployment.
  *
  *      Nevertheless, the full IToll interface is implemented to ensure compatibility.
  *
