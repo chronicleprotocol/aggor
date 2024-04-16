@@ -22,6 +22,8 @@ library LibUniswapOracles {
     /// @param quoteToken The quote pair for the pool, e.g. USDT in WETHUSDT.
     /// @param baseDecimals The decimals of the base pair ERC-20 token.
     /// @param lookback The time in seconds to look back per TWAP.
+    /// @return uint The Uniswap TWAP price for 1e`baseDecimals` base tokens denominated in
+    ///              `quoteToken`.
     function readOracle(
         address pool,
         address baseToken,
