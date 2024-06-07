@@ -19,6 +19,7 @@ import {LibMedian} from "./libs/LibMedian.sol";
 
 /**
  * @title Aggor
+ * @custom:version v1.0.0
  *
  * @notice Oracle aggregator distributing trust among different oracle providers
  *
