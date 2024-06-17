@@ -793,6 +793,122 @@ contract AggorTest is Test {
         _checkReadFunctions(wantVal, wantAge, wantStatus);
     }
 
+    /// @dev This test verifies that any gas less than necessary given to a
+    ///      read call will lead to a revert.
+    function test_read_RevertsIf_OutOfGas_ExplicitBoundaryChecks() public {
+        uint valChr = 1 * 1e18;
+        uint valChl = 1 * 1e8;
+
+        ChronicleMock(chronicle).setValAndAge(valChr, block.timestamp);
+        ChainlinkMock(chainlink).setValAndAge(
+            int(uint(valChl)), block.timestamp
+        );
+
+        uint wantVal = 1 * 1e8;
+        uint wantAge = block.timestamp;
+        IAggor.Status memory wantStatus =
+            IAggor.Status({path: 2, goodOracleCtr: 2});
+
+        // Note to call each read function once to warm slots.
+        aggor.latestAnswer();
+        aggor.latestRoundData();
+        aggor.readWithStatus();
+
+        // Note to manually cap gas of read calls.
+        //
+        // The gas usage values were derived using the following solc options:
+        // version        : 0.8.16
+        // optimizer      : true
+        // optimizer_runs : 10_000
+        // via-ir         : false
+        uint gasUsage_latestAnswer = 4896;
+        uint gasUsage_latestRoundData = 5062;
+        uint gasUsage_readWithStatus = 5009;
+
+        // Verify read functions succeed with gas caps.
+        // - latestAnswer()
+        int answer = aggor.latestAnswer{gas: gasUsage_latestAnswer}();
+        assertEq(uint(answer), wantVal);
+        // - latestRoundData()
+        uint80 roundId;
+        uint startedAt;
+        uint updatedAt;
+        uint80 answeredInRound;
+        (roundId, answer, startedAt, updatedAt, answeredInRound) =
+            aggor.latestRoundData();
+        assertEq(roundId, 1);
+        assertEq(uint(answer), wantVal);
+        assertEq(startedAt, 0);
+        assertEq(updatedAt, wantAge);
+        assertEq(answeredInRound, 1);
+        // - readWithStatus()
+        uint val;
+        uint age;
+        IAggor.Status memory status;
+        (val, age, status) = aggor.readWithStatus();
+        assertEq(val, wantVal);
+        assertEq(age, wantAge);
+        assertEq(status.path, wantStatus.path);
+        assertEq(status.goodOracleCtr, wantStatus.goodOracleCtr);
+
+        // Verify read functions revert with less than gas caps.
+        // - latestAnswer();
+        vm.expectRevert();
+        aggor.latestAnswer{gas: gasUsage_latestAnswer - 1}();
+        // - latestRoundData();
+        vm.expectRevert();
+        aggor.latestRoundData{gas: gasUsage_latestRoundData - 1}();
+        // - readWithStatus();
+        vm.expectRevert();
+        aggor.readWithStatus{gas: gasUsage_readWithStatus - 1}();
+    }
+
+    /// @dev This test verifies that, given enough gas, a Chronicle OOO does
+    ///      not lead to a total revert.
+    function test_read_DoesNotAlwaysRevertIf_ChronicleOOO() public {
+        uint valChr = 2 * 1e18;
+        uint valChl = 1 * 1e8;
+
+        ChronicleMock(chronicle).setValAndAge(valChr, block.timestamp);
+        ChainlinkMock(chainlink).setValAndAge(
+            int(uint(valChl)), block.timestamp
+        );
+
+        // Let Chronicle run into OOO.
+        ChronicleMock(chronicle).setBurnGas(true);
+
+        // Expect only Chainlink's value.
+        uint wantVal = 1 * 1e8;
+        uint wantAge = block.timestamp;
+        IAggor.Status memory wantStatus =
+            IAggor.Status({path: 4, goodOracleCtr: 1});
+
+        _checkReadFunctions(wantVal, wantAge, wantStatus);
+    }
+
+    /// @dev This test verifies that, given enough gas, a Chainlink OOO does
+    ///      not lead to a total revert.
+    function test_read_DoesNotAlwaysRevertIf_ChainlinkOOO() public {
+        uint valChr = 2 * 1e18;
+        uint valChl = 1 * 1e8;
+
+        ChronicleMock(chronicle).setValAndAge(valChr, block.timestamp);
+        ChainlinkMock(chainlink).setValAndAge(
+            int(uint(valChl)), block.timestamp
+        );
+
+        // Let Chainlink run into OOO.
+        ChainlinkMock(chainlink).setBurnGas(true);
+
+        // Expect only Chronicle's value (in 8 decimals).
+        uint wantVal = 2 * 1e8;
+        uint wantAge = block.timestamp;
+        IAggor.Status memory wantStatus =
+            IAggor.Status({path: 4, goodOracleCtr: 1});
+
+        _checkReadFunctions(wantVal, wantAge, wantStatus);
+    }
+
     // -- Auth'ed Functionality --
 
     function testFuzz_setAgreementDistance(uint128 agreementDistance_) public {

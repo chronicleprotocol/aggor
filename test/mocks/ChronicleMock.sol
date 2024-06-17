@@ -6,6 +6,7 @@ contract ChronicleMock {
     uint age;
     bool ok = true;
     bool tolled = true;
+    bool burnGas = false;
 
     function setValAndAge(uint val_, uint age_) public {
         val = val_;
@@ -20,8 +21,19 @@ contract ChronicleMock {
         tolled = tolled_;
     }
 
+    function setBurnGas(bool burnGas_) public {
+        burnGas = burnGas_;
+    }
+
     function tryReadWithAge() public view returns (bool, uint, uint) {
         require(tolled);
+
+        if (burnGas) {
+            // Allocate "infinite" amount of memory.
+            assembly ("memory-safe") {
+                mstore(not(0), 1)
+            }
+        }
 
         return (ok, val, age);
     }
