@@ -220,6 +220,157 @@ contract AggorIntegrationTest_eth_ETH_USD is Test {
         assertEq(gotStatus.path, wantStatus.path);
         assertEq(gotStatus.goodOracleCtr, wantStatus.goodOracleCtr);
     }
+
+    /// @dev Verifies that its not possible to manipulate Aggor's value
+    ///      derivation path in `latestAnswer()` to prevent the Chainlink
+    ///      oracle from being read via capping the forwarded gas.
+    ///
+    /// @dev Note to execute against local forked anvil node in order to
+    ///      prevent rate-limits.
+    function test_latestAnswer_OOGAttack_PreventChainlink() public {
+        uint128 chrVal = 2e18;
+        uint128 chlVal = 1e8;
+
+        // Set oracles.
+        _setChronicle(chrVal, uint32(block.timestamp));
+        _setChainlink(chlVal, uint32(block.timestamp));
+
+        // Expect only Chronicle's value (in 8 decimals).
+        uint wantVal = 2e8;
+
+        // Call read function once to warm slots.
+        aggor.latestAnswer();
+
+        // Gas usage is an upper bound based on following solc options:
+        // version        : 0.8.16
+        // optimizer      : true
+        // optimizer_runs : 10_000
+        // via-ir         : false
+        uint gasUsage = 9000;
+        while (gasUsage > 500) {
+            try aggor.latestAnswer{gas: gasUsage}() returns (int answer) {
+                // Call returned, ie no OOG.
+                // Verify whether Chainlink call was executed.
+                bool chainlinkExecuted = uint(answer) != wantVal;
+                if (!chainlinkExecuted) {
+                    // Success! Found a gas cap to execute Chronicle call but
+                    // not Chainlink, while at the same providing enough gas
+                    // for Aggor to return.
+                    revert("latestAnswer() vulnerable to OOG attack");
+                } else {
+                    // Gas cap was too much. Function executed normally.
+                    gasUsage -= 1;
+                }
+            } catch {
+                // Only possible due to OOG.
+                // If this happens we provided too little gas for the call to
+                // succeed.
+                break;
+            }
+        }
+    }
+
+    /// @dev Verifies that its not possible to manipulate Aggor's value
+    ///      derivation path in `latestRoundData()` to prevent the Chainlink
+    ///      oracle from being read via capping the forwarded gas.
+    ///
+    /// @dev Note to execute against local forked anvil node in order to
+    ///      prevent rate-limits.
+    function test_latestRoundData_OOGAttack_PreventChainlink() public {
+        uint128 chrVal = 2e18;
+        uint128 chlVal = 1e8;
+
+        // Set oracles.
+        _setChronicle(chrVal, uint32(block.timestamp));
+        _setChainlink(chlVal, uint32(block.timestamp));
+
+        // Expect only Chronicle's value (in 8 decimals).
+        uint wantVal = 2e8;
+
+        // Call read function once to warm slots.
+        aggor.latestRoundData();
+
+        // Gas usage is an upper bound based on following solc options:
+        // version        : 0.8.16
+        // optimizer      : true
+        // optimizer_runs : 10_000
+        // via-ir         : false
+        uint gasUsage = 10_000;
+        while (gasUsage > 500) {
+            try aggor.latestRoundData{gas: gasUsage}() returns (
+                uint80, int answer, uint, uint, uint80
+            ) {
+                // Call returned, ie no OOG.
+                // Verify whether Chainlink call was executed.
+                bool chainlinkExecuted = uint(answer) != wantVal;
+                if (!chainlinkExecuted) {
+                    // Success! Found a gas cap to execute Chronicle call but
+                    // not Chainlink, while at the same providing enough gas
+                    // for Aggor to return.
+                    revert("latestRoundData() vulnerable to OOG attack");
+                } else {
+                    // Gas cap was too much. Function executed normally.
+                    gasUsage -= 1;
+                }
+            } catch {
+                // Only possible due to OOG.
+                // If this happens we provided too little gas for the call to
+                // succeed.
+                break;
+            }
+        }
+    }
+
+    /// @dev Verifies that its not possible to manipulate Aggor's value
+    ///      derivation path in `readWithStatus()` to prevent the Chainlink
+    ///      oracle from being read via capping the forwarded gas.
+    ///
+    /// @dev Note to execute against local forked anvil node in order to
+    ///      prevent rate-limits.
+    function test_readWithStatus_OOGAttack_PreventChainlink() public {
+        uint128 chrVal = 2e18;
+        uint128 chlVal = 1e8;
+
+        // Set oracles.
+        _setChronicle(chrVal, uint32(block.timestamp));
+        _setChainlink(chlVal, uint32(block.timestamp));
+
+        // Expect only Chronicle's value (in 8 decimals).
+        uint wantVal = 2e8;
+
+        // Call read function once to warm slots.
+        aggor.readWithStatus();
+
+        // Gas usage is an upper bound based on following solc options:
+        // version        : 0.8.16
+        // optimizer      : true
+        // optimizer_runs : 10_000
+        // via-ir         : false
+        uint gasUsage = 10_000;
+        while (gasUsage > 500) {
+            try aggor.readWithStatus{gas: gasUsage}() returns (
+                uint val, uint, IAggor.Status memory
+            ) {
+                // Call returned, ie no OOG.
+                // Verify whether Chainlink call was executed.
+                bool chainlinkExecuted = val != wantVal;
+                if (!chainlinkExecuted) {
+                    // Success! Found a gas cap to execute Chronicle call but
+                    // not Chainlink, while at the same providing enough gas
+                    // for Aggor to return.
+                    revert("readWithStatus() vulnerable to OOG attack");
+                } else {
+                    // Gas cap was too much. Function executed normally.
+                    gasUsage -= 1;
+                }
+            } catch {
+                // Only possible due to OOG.
+                // If this happens we provided too little gas for the call to
+                // succeed.
+                break;
+            }
+        }
+    }
 }
 
 interface IChainlinkAggregatorV3_Aggregator {
