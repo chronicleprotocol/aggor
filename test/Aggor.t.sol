@@ -796,15 +796,15 @@ contract AggorTest is Test {
     /// @dev This test verifies that any gas less than necessary given to a
     ///      read call will lead to a revert.
     function test_read_RevertsIf_OutOfGas_ExplicitBoundaryChecks() public {
-        uint valChr = 1 * 1e18;
-        uint valChl = 1 * 1e8;
+        uint valChr = 1e18;
+        uint valChl = 1e8;
 
         ChronicleMock(chronicle).setValAndAge(valChr, block.timestamp);
         ChainlinkMock(chainlink).setValAndAge(
             int(uint(valChl)), block.timestamp
         );
 
-        uint wantVal = 1 * 1e8;
+        uint wantVal = 1e8;
         uint wantAge = block.timestamp;
         IAggor.Status memory wantStatus =
             IAggor.Status({path: 2, goodOracleCtr: 2});
@@ -863,22 +863,22 @@ contract AggorTest is Test {
         aggor.readWithStatus{gas: gasUsage_readWithStatus - 1}();
     }
 
-    /// @dev This test verifies that, given enough gas, a Chronicle OOO does
+    /// @dev This test verifies that, given enough gas, a Chronicle OOG does
     ///      not lead to a total revert.
-    function test_read_DoesNotAlwaysRevertIf_ChronicleOOO() public {
-        uint valChr = 2 * 1e18;
-        uint valChl = 1 * 1e8;
+    function test_read_DoesNotAlwaysRevertIf_ChronicleOOG() public {
+        uint valChr = 2e18;
+        uint valChl = 1e8;
 
         ChronicleMock(chronicle).setValAndAge(valChr, block.timestamp);
         ChainlinkMock(chainlink).setValAndAge(
             int(uint(valChl)), block.timestamp
         );
 
-        // Let Chronicle run into OOO.
+        // Let Chronicle run into OOG.
         ChronicleMock(chronicle).setBurnGas(true);
 
         // Expect only Chainlink's value.
-        uint wantVal = 1 * 1e8;
+        uint wantVal = 1e8;
         uint wantAge = block.timestamp;
         IAggor.Status memory wantStatus =
             IAggor.Status({path: 4, goodOracleCtr: 1});
@@ -886,22 +886,22 @@ contract AggorTest is Test {
         _checkReadFunctions(wantVal, wantAge, wantStatus);
     }
 
-    /// @dev This test verifies that, given enough gas, a Chainlink OOO does
+    /// @dev This test verifies that, given enough gas, a Chainlink OOG does
     ///      not lead to a total revert.
-    function test_read_DoesNotAlwaysRevertIf_ChainlinkOOO() public {
-        uint valChr = 2 * 1e18;
-        uint valChl = 1 * 1e8;
+    function test_read_DoesNotAlwaysRevertIf_ChainlinkOOG() public {
+        uint valChr = 2e18;
+        uint valChl = 1e8;
 
         ChronicleMock(chronicle).setValAndAge(valChr, block.timestamp);
         ChainlinkMock(chainlink).setValAndAge(
             int(uint(valChl)), block.timestamp
         );
 
-        // Let Chainlink run into OOO.
+        // Let Chainlink run into OOG.
         ChainlinkMock(chainlink).setBurnGas(true);
 
         // Expect only Chronicle's value (in 8 decimals).
-        uint wantVal = 2 * 1e8;
+        uint wantVal = 2e8;
         uint wantAge = block.timestamp;
         IAggor.Status memory wantStatus =
             IAggor.Status({path: 4, goodOracleCtr: 1});
