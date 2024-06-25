@@ -247,7 +247,7 @@ contract AggorIntegrationTest_eth_ETH_USD is Test {
         // optimizer_runs : 10_000
         // via-ir         : false
         uint gasUsage = 9000;
-        while (gasUsage > 500) {
+        while (gasUsage != 0) {
             try aggor.latestAnswer{gas: gasUsage}() returns (int answer) {
                 // Call returned, ie no OOG.
                 // Verify whether Chainlink call was executed.
@@ -296,7 +296,7 @@ contract AggorIntegrationTest_eth_ETH_USD is Test {
         // optimizer_runs : 10_000
         // via-ir         : false
         uint gasUsage = 10_000;
-        while (gasUsage > 500) {
+        while (gasUsage != 0) {
             try aggor.latestRoundData{gas: gasUsage}() returns (
                 uint80, int answer, uint, uint, uint80
             ) {
@@ -347,7 +347,7 @@ contract AggorIntegrationTest_eth_ETH_USD is Test {
         // optimizer_runs : 10_000
         // via-ir         : false
         uint gasUsage = 10_000;
-        while (gasUsage > 500) {
+        while (gasUsage != 0) {
             try aggor.readWithStatus{gas: gasUsage}() returns (
                 uint val, uint, IAggor.Status memory
             ) {
