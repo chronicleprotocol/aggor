@@ -845,7 +845,8 @@ contract AggorTest is Test {
         uint val;
         uint age;
         IAggor.Status memory status;
-        (val, age, status) = aggor.readWithStatus{gas: gasUsage_readWithStatus}();
+        (val, age, status) =
+            aggor.readWithStatus{gas: gasUsage_readWithStatus}();
         assertEq(val, wantVal);
         assertEq(age, wantAge);
         assertEq(status.path, wantStatus.path);
