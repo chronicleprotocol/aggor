@@ -835,7 +835,7 @@ contract AggorTest is Test {
         uint updatedAt;
         uint80 answeredInRound;
         (roundId, answer, startedAt, updatedAt, answeredInRound) =
-            aggor.latestRoundData();
+            aggor.latestRoundData{gas: gasUsage_latestRoundData}();
         assertEq(roundId, 1);
         assertEq(uint(answer), wantVal);
         assertEq(startedAt, 0);
@@ -845,7 +845,7 @@ contract AggorTest is Test {
         uint val;
         uint age;
         IAggor.Status memory status;
-        (val, age, status) = aggor.readWithStatus();
+        (val, age, status) = aggor.readWithStatus{gas: gasUsage_readWithStatus}();
         assertEq(val, wantVal);
         assertEq(age, wantAge);
         assertEq(status.path, wantStatus.path);
