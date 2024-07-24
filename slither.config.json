@@ -2,7 +2,6 @@
     "filter_paths": "lib,test,script",
     "solc_remaps": [
         "chronicle-std/=lib/chronicle-std/src",
-        "greenhouse/=lib/greenhouse/src",
         "ds-test/=lib/forge-std/lib/ds-test/src/",
         "forge-std/=lib/forge-std/src/"
     ]
