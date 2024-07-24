@@ -6,8 +6,6 @@ import {console2 as console} from "forge-std/console2.sol";
 
 import {IAuth} from "chronicle-std/auth/IAuth.sol";
 
-import {IGreenhouse} from "greenhouse/IGreenhouse.sol";
-
 import {IAggor} from "src/IAggor.sol";
 import {Aggor_BASE_QUOTE_COUNTER as Aggor} from "src/Aggor.sol";
 // @todo      ^^^^ ^^^^^ ^^^^^^^ Adjust name of Aggor instance
@@ -16,36 +14,24 @@ import {Aggor_BASE_QUOTE_COUNTER as Aggor} from "src/Aggor.sol";
  * @notice Aggor Management Script
  */
 contract AggorScript is Script {
-    // -- Deployment Configuration --
-
-    // -- Immutable
-
-    address bud;
-    address chronicle;
-    address chainlink;
-    address uniswapPool;
-    address uniswapBaseToken;
-    address uniswapQuoteToken;
-    uint8 uniswapBaseTokenDecimals;
-    uint32 uniswapLookback;
-
-    // -- Mutable
-
-    uint128 agreementDistance;
-    uint32 ageThreshold;
-
-    // -- Deployment Function --
-
-    /// @dev Deploys a new Aggor instance via Greenhouse instance
-    ///      `greenhouse` and salt `salt` with `initialAuthed` being the
-    ///      address initially auth'ed.
-    function deploy(address greenhouse, bytes32 salt, address initialAuthed)
-        public
-    {
-        // Create creation code with constructor arguments.
-        bytes memory creationCode = abi.encodePacked(
-            type(Aggor).creationCode,
-            abi.encode(
+    /// @dev Deploys a new Aggor instance with `initialAuthed` being the address
+    ///      initially auth'ed.
+    function deploy(
+        address initialAuthed,
+        address bud,
+        address chronicle,
+        address chainlink,
+        address uniswapPool,
+        address uniswapBaseToken,
+        address uniswapQuoteToken,
+        uint8 uniswapBaseTokenDecimals,
+        uint32 uniswapLookback,
+        uint128 agreementDistance,
+        uint32 ageThreshold
+    ) public {
+        vm.startBroadcast();
+        address deployed = address(
+            new Aggor(
                 initialAuthed,
                 bud,
                 chronicle,
@@ -59,14 +45,6 @@ contract AggorScript is Script {
                 ageThreshold
             )
         );
-
-        // Ensure salt not yet used.
-        address deployed = IGreenhouse(greenhouse).addressOf(salt);
-        require(deployed.code.length == 0, "Salt already used");
-
-        // Plant creation code via greenhouse.
-        vm.startBroadcast();
-        IGreenhouse(greenhouse).plant(salt, creationCode);
         vm.stopBroadcast();
 
         console.log("Deployed at", deployed);
