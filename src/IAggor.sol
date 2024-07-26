@@ -103,6 +103,13 @@ interface IAggor {
         view
         returns (uint8 baseTokenDecimals);
 
+    /// @notice Returns the Uniswap pool's quote token's decimals.
+    /// @return quoteTokenDecimals The Uniswap pool's quote token's decimals.
+    function uniswapQuoteTokenDecimals()
+        external
+        view
+        returns (uint8 quoteTokenDecimals);
+
     /// @notice Returns the time in seconds to use as lookback for Uniswap Twap
     ///         oracle.
     /// @return lookback The time in seconds to use as lookback.

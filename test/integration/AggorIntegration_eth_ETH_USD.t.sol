@@ -4,6 +4,10 @@ pragma solidity ^0.8.16;
 import {Test} from "forge-std/Test.sol";
 import {console2 as console} from "forge-std/console2.sol";
 
+import {LibUniswapOracles} from "src/libs/LibUniswapOracles.sol";
+import {LibUniswapOraclesWrapper} from
+    "test/integration/LibUniswapOraclesIntegration_eth_USDC_DAI.t.sol";
+
 import {IAuth} from "chronicle-std/auth/IAuth.sol";
 import {IToll} from "chronicle-std/toll/IToll.sol";
 import {IChronicle} from "chronicle-std/IChronicle.sol";
@@ -19,6 +23,7 @@ import {IAggor} from "src/IAggor.sol";
  *      - tie breaker : Uniswap Twap USDC/WETH
  */
 contract AggorIntegrationTest_eth_ETH_USD is Test {
+    LibUniswapOraclesWrapper wrapper;
     Aggor aggor;
 
     // Oracle Providers:
@@ -30,14 +35,16 @@ contract AggorIntegrationTest_eth_ETH_USD is Test {
 
     // Twap Provider: Uniswap USDC/WETH pool
     address uniswapPool = address(0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640);
-    // Base token: USDC
+    // Base token: WETH
     address uniswapBaseToken =
-        address(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
-    // Quote token: WETH
-    address uniswapQuoteToken =
         address(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
-    // Base token decimals: USDC.decimals()
-    uint8 uniswapBaseDec = 6;
+    // Quote token: USDC
+    address uniswapQuoteToken =
+        address(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
+    // Base token decimals: WETH.decimals()
+    uint8 uniswapBaseDec = 18;
+    // Quote token decimals: WETH.decimals()
+    uint8 uniswapQuoteDec = 6;
     // Twap lookback in seconds: 1 hour
     uint32 uniswapLookback = 1 hours;
 
@@ -59,6 +66,7 @@ contract AggorIntegrationTest_eth_ETH_USD is Test {
             uniswapBaseToken,
             uniswapQuoteToken,
             uniswapBaseDec,
+            uniswapQuoteDec,
             uniswapLookback,
             agreementDistance,
             ageThreshold
@@ -67,6 +75,8 @@ contract AggorIntegrationTest_eth_ETH_USD is Test {
         // Kiss aggor on chronicle oracle.
         vm.prank(IAuth(chronicle).authed()[0]);
         IToll(chronicle).kiss(address(aggor));
+
+        wrapper = new LibUniswapOraclesWrapper();
     }
 
     function _setChronicle(uint128 val, uint32 age) internal {
@@ -370,6 +380,89 @@ contract AggorIntegrationTest_eth_ETH_USD is Test {
                 break;
             }
         }
+    }
+
+    function test_TwapScaleUp() public {
+        uint price = wrapper.readOracle(
+            uniswapPool,
+            uniswapBaseToken,
+            uniswapQuoteToken,
+            uniswapBaseDec,
+            uniswapLookback
+        );
+
+        // Scale price up from USDC.decimals()
+        uint128 wantVal = uint128(price * 10 ** (8 - 6));
+        assertTrue(wantVal > price);
+
+        // Make TWAP value the median.
+        uint128 chrVal = uint128(wantVal) - 1;
+        uint128 chlVal = uint128(wantVal) + 1;
+
+        // Let oracles be stale
+        uint32 chlAge = 0;
+        uint32 chrAge = 0;
+
+        // Set oracles.
+        _setChronicle(chrVal, chrAge);
+        _setChainlink(chlVal, chlAge);
+
+        // Read aggor.
+        uint gotVal;
+        (gotVal,,) = aggor.readWithStatus();
+        assertEq(gotVal, wantVal);
+    }
+
+    // Note we reverse the default base/quote for this test
+    function test_TwapScaleDown() public {
+        uint price = wrapper.readOracle(
+            uniswapPool,
+            uniswapQuoteToken,
+            uniswapBaseToken,
+            uniswapQuoteDec,
+            uniswapLookback
+        );
+
+        // Scale price down from WETH.decimals()
+        uint128 wantVal = uint128(price / 10 ** (18 - 8));
+        assertTrue(wantVal < price);
+
+        // Redeploy aggor with Uniswap params reversed.
+        aggor = new Aggor(
+            address(this),
+            address(this),
+            chronicle,
+            chainlink,
+            uniswapPool,
+            uniswapQuoteToken,
+            uniswapBaseToken,
+            uniswapQuoteDec,
+            uniswapBaseDec,
+            uniswapLookback,
+            agreementDistance,
+            ageThreshold
+        );
+
+        // Kiss aggor on chronicle oracle.
+        vm.prank(IAuth(chronicle).authed()[0]);
+        IToll(chronicle).kiss(address(aggor));
+
+        // Make TWAP value the median.
+        uint128 chrVal = wantVal - 1;
+        uint128 chlVal = wantVal + 1;
+
+        // Let oracles be stale
+        uint32 chlAge = 0;
+        uint32 chrAge = 0;
+
+        // Set oracles.
+        _setChronicle(chrVal, chrAge);
+        _setChainlink(chlVal, chlAge);
+
+        // Read aggor.
+        uint gotVal;
+        (gotVal,,) = aggor.readWithStatus();
+        assertEq(gotVal, wantVal);
     }
 }
 
