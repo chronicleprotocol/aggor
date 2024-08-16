@@ -19,7 +19,7 @@ import {LibMedian} from "./libs/LibMedian.sol";
 
 /**
  * @title Aggor
- * @custom:version v1.0.0
+ * @custom:version v1.0.1
  *
  * @notice Oracle aggregator distributing trust among different oracle providers
  *
@@ -74,6 +74,8 @@ contract Aggor is IAggor, IToll, Auth {
     /// @inheritdoc IAggor
     uint8 public immutable uniswapBaseTokenDecimals;
     /// @inheritdoc IAggor
+    uint8 public immutable uniswapQuoteTokenDecimals;
+    /// @inheritdoc IAggor
     uint32 public immutable uniswapLookback;
 
     // -- Mutable Configurations --
@@ -103,6 +105,7 @@ contract Aggor is IAggor, IToll, Auth {
         address uniswapBaseToken_,
         address uniswapQuoteToken_,
         uint8 uniswapBaseTokenDecimals_,
+        uint8 uniswapQuoteTokenDecimals_,
         uint32 uniswapLookback_,
         uint128 agreementDistance_,
         uint32 ageThreshold_
@@ -113,6 +116,7 @@ contract Aggor is IAggor, IToll, Auth {
             uniswapBaseToken_,
             uniswapQuoteToken_,
             uniswapBaseTokenDecimals_,
+            uniswapQuoteTokenDecimals_,
             uniswapLookback_
         );
 
@@ -124,6 +128,7 @@ contract Aggor is IAggor, IToll, Auth {
         uniswapBaseToken = uniswapBaseToken_;
         uniswapQuoteToken = uniswapQuoteToken_;
         uniswapBaseTokenDecimals = uniswapBaseTokenDecimals_;
+        uniswapQuoteTokenDecimals = uniswapQuoteTokenDecimals_;
         uniswapLookback = uniswapLookback_;
 
         // Emit events indicating address(0) and _bud are tolled.
@@ -142,6 +147,7 @@ contract Aggor is IAggor, IToll, Auth {
         address uniswapBaseToken_,
         address uniswapQuoteToken_,
         uint8 uniswapBaseTokenDecimals_,
+        uint8 uniswapQuoteTokenDecimals_,
         uint32 uniswapLookback_
     ) internal view {
         require(uniswapPool_ != address(0), "Uniswap pool must not be zero");
@@ -163,7 +169,7 @@ contract Aggor is IAggor, IToll, Auth {
             "Uniswap quote token mismatch"
         );
 
-        // Verify base token's decimals.
+        // Verify token decimals.
         require(
             uniswapBaseTokenDecimals_ == IERC20(uniswapBaseToken_).decimals(),
             "Uniswap base token decimals mismatch"
@@ -171,6 +177,10 @@ contract Aggor is IAggor, IToll, Auth {
         require(
             uniswapBaseTokenDecimals_ <= _MAX_UNISWAP_BASE_DECIMALS,
             "Uniswap base token decimals too high"
+        );
+        require(
+            uniswapQuoteTokenDecimals_ == IERC20(uniswapQuoteToken_).decimals(),
+            "Uniswap quote token decimals mismatch"
         );
 
         // Verify TWAP is initialized.
@@ -338,6 +348,14 @@ contract Aggor is IAggor, IToll, Auth {
             uniswapLookback
         );
 
+        if (uniswapQuoteTokenDecimals <= decimals) {
+            // Scale up
+            twap *= 10 ** (decimals - uniswapQuoteTokenDecimals);
+        } else {
+            // Scale down
+            twap /= 10 ** (uniswapQuoteTokenDecimals - decimals);
+        }
+
         if (twap <= type(uint128).max) {
             return (true, uint128(twap));
         } else {
@@ -488,6 +506,7 @@ contract Aggor_BASE_QUOTE_COUNTER is Aggor {
         address uniswapBaseToken_,
         address uniswapQuoteToken_,
         uint8 uniswapBaseDec_,
+        uint8 uniswapQuoteDec_,
         uint32 uniswapLookback_,
         uint128 agreementDistance_,
         uint32 ageThreshold_
@@ -501,6 +520,7 @@ contract Aggor_BASE_QUOTE_COUNTER is Aggor {
             uniswapBaseToken_,
             uniswapQuoteToken_,
             uniswapBaseDec_,
+            uniswapQuoteDec_,
             uniswapLookback_,
             agreementDistance_,
             ageThreshold_

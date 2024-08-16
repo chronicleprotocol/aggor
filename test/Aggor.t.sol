@@ -34,11 +34,11 @@ contract AggorTest is Test {
     // Twap Provider:
     address uniswapPool = address(new UniswapPoolMock());
     address uniswapBaseToken = address(new ERC20Mock("base", "base", 18));
-    address uniswapQuoteToken = address(new ERC20Mock("quote", "quote", 18));
+    address uniswapQuoteToken = address(new ERC20Mock("quote", "quote", 6));
     uint32 uniswapLookback = 1 days;
 
     // For more info, see mocks/UniswapPoolMock::observe().
-    uint valTwap = 999_902;
+    uint valTwap = 99_990_200; // Scaled for 10^Aggor.decimals()
 
     // Configurations:
     uint128 agreementDistance = 9e17; // = 0.9e18 = 10%
@@ -58,6 +58,7 @@ contract AggorTest is Test {
             uniswapBaseToken,
             uniswapQuoteToken,
             IERC20(uniswapBaseToken).decimals(),
+            IERC20(uniswapQuoteToken).decimals(),
             uniswapLookback,
             agreementDistance,
             ageThreshold
@@ -74,6 +75,7 @@ contract AggorTest is Test {
             uniswapBaseToken,
             uniswapQuoteToken,
             IERC20(uniswapBaseToken).decimals(),
+            IERC20(uniswapQuoteToken).decimals(),
             uniswapLookback,
             agreementDistance,
             ageThreshold
@@ -85,6 +87,7 @@ contract AggorTest is Test {
             uniswapBaseToken,
             uniswapQuoteToken,
             IERC20(uniswapBaseToken).decimals(),
+            IERC20(uniswapQuoteToken).decimals(),
             uniswapLookback
         );
     }
@@ -93,6 +96,7 @@ contract AggorTest is Test {
 
     function test_Deployment_FailsIf_UniswapPoolZeroAddress() public {
         uint8 decimals = IERC20(uniswapBaseToken).decimals();
+        uint8 quoteDecimals = IERC20(uniswapQuoteToken).decimals();
 
         vm.expectRevert("Uniswap pool must not be zero");
         new Aggor(
@@ -104,6 +108,7 @@ contract AggorTest is Test {
             uniswapBaseToken,
             uniswapQuoteToken,
             decimals,
+            quoteDecimals,
             uniswapLookback,
             agreementDistance,
             ageThreshold
@@ -115,12 +120,14 @@ contract AggorTest is Test {
             uniswapBaseToken,
             uniswapQuoteToken,
             decimals,
+            quoteDecimals,
             uniswapLookback
         );
     }
 
     function test_Deployment_FailsIf_BaseTokenEqualsQuoteToken() public {
         uint8 decimals = IERC20(uniswapBaseToken).decimals();
+        uint8 quoteDecimals = IERC20(uniswapQuoteToken).decimals();
 
         vm.expectRevert("Uniswap tokens must not be equal");
         new Aggor(
@@ -132,6 +139,7 @@ contract AggorTest is Test {
             uniswapBaseToken,
             uniswapBaseToken, // <- !
             decimals,
+            quoteDecimals,
             uniswapLookback,
             agreementDistance,
             ageThreshold
@@ -143,6 +151,7 @@ contract AggorTest is Test {
             uniswapBaseToken,
             uniswapBaseToken, // <- !
             decimals,
+            quoteDecimals,
             uniswapLookback
         );
     }
@@ -150,6 +159,7 @@ contract AggorTest is Test {
     function test_Deployment_FailsIf_BaseTokenNotPoolToken() public {
         address notPoolToken = address(new ERC20Mock("", "", 18));
         uint8 decimals = IERC20(notPoolToken).decimals();
+        uint8 quoteDecimals = IERC20(uniswapQuoteToken).decimals();
 
         vm.expectRevert("Uniswap base token mismatch");
         new Aggor(
@@ -161,6 +171,7 @@ contract AggorTest is Test {
             notPoolToken, // <- !
             uniswapQuoteToken,
             decimals,
+            quoteDecimals,
             uniswapLookback,
             agreementDistance,
             ageThreshold
@@ -172,6 +183,7 @@ contract AggorTest is Test {
             notPoolToken, // <- !
             uniswapQuoteToken,
             decimals,
+            quoteDecimals,
             uniswapLookback
         );
     }
@@ -179,6 +191,7 @@ contract AggorTest is Test {
     function test_Deployment_FailsIf_QuoteTokenNotPoolToken() public {
         address notPoolToken = address(new ERC20Mock("", "", 18));
         uint8 decimals = IERC20(uniswapBaseToken).decimals();
+        uint8 quoteDecimals = IERC20(uniswapQuoteToken).decimals();
 
         vm.expectRevert("Uniswap quote token mismatch");
         new Aggor(
@@ -190,6 +203,7 @@ contract AggorTest is Test {
             uniswapBaseToken,
             notPoolToken, // <- !
             decimals,
+            quoteDecimals,
             uniswapLookback,
             agreementDistance,
             ageThreshold
@@ -201,12 +215,14 @@ contract AggorTest is Test {
             uniswapBaseToken,
             notPoolToken, // <- !
             decimals,
+            quoteDecimals,
             uniswapLookback
         );
     }
 
     function test_Deployment_FailsIf_BaseTokenDecimalsWrong() public {
         uint8 decimals = IERC20(uniswapBaseToken).decimals();
+        uint8 quoteDecimals = IERC20(uniswapQuoteToken).decimals();
 
         vm.expectRevert("Uniswap base token decimals mismatch");
         new Aggor(
@@ -218,6 +234,7 @@ contract AggorTest is Test {
             uniswapBaseToken,
             uniswapQuoteToken,
             decimals + 1, // <- !
+            quoteDecimals,
             uniswapLookback,
             agreementDistance,
             ageThreshold
@@ -229,6 +246,7 @@ contract AggorTest is Test {
             uniswapBaseToken,
             uniswapQuoteToken,
             decimals + 1, // <- !
+            quoteDecimals,
             uniswapLookback
         );
     }
@@ -237,6 +255,7 @@ contract AggorTest is Test {
     ) public {
         uniswapBaseToken = address(new ERC20Mock("base", "base", 100)); // <- !
         uint8 decimals = IERC20(uniswapBaseToken).decimals();
+        uint8 quoteDecimals = IERC20(uniswapQuoteToken).decimals();
 
         UniswapPoolMock(uniswapPool).setToken0(uniswapBaseToken);
 
@@ -250,6 +269,7 @@ contract AggorTest is Test {
             uniswapBaseToken,
             uniswapQuoteToken,
             decimals,
+            quoteDecimals,
             uniswapLookback,
             agreementDistance,
             ageThreshold
@@ -261,6 +281,7 @@ contract AggorTest is Test {
             uniswapBaseToken,
             uniswapQuoteToken,
             decimals,
+            quoteDecimals,
             uniswapLookback
         );
     }
@@ -268,6 +289,7 @@ contract AggorTest is Test {
     function test_Deployment_FailsIf_UniswapLookbackBiggerThanOldestObservation(
     ) public {
         uint8 decimals = IERC20(uniswapBaseToken).decimals();
+        uint8 quoteDecimals = IERC20(uniswapQuoteToken).decimals();
 
         vm.expectRevert("Uniswap lookback too high");
         new Aggor(
@@ -279,6 +301,7 @@ contract AggorTest is Test {
             uniswapBaseToken,
             uniswapQuoteToken,
             decimals,
+            quoteDecimals,
             type(uint32).max, // <- !
             agreementDistance,
             ageThreshold
@@ -290,6 +313,7 @@ contract AggorTest is Test {
             uniswapBaseToken,
             uniswapQuoteToken,
             decimals,
+            quoteDecimals,
             type(uint32).max
         );
     }
@@ -1048,6 +1072,7 @@ contract Aggor_VerifyTwapConfig is Aggor {
         address uniswapBaseToken_,
         address uniswapQuoteToken_,
         uint8 uniswapBaseTokenDecimals_,
+        uint8 uniswapQuoteTokenDecimals_,
         uint32 uniswapLookback_,
         uint128 agreementDistance_,
         uint32 ageThreshold_
@@ -1061,6 +1086,7 @@ contract Aggor_VerifyTwapConfig is Aggor {
             uniswapBaseToken_,
             uniswapQuoteToken_,
             uniswapBaseTokenDecimals_,
+            uniswapQuoteTokenDecimals_,
             uniswapLookback_,
             agreementDistance_,
             ageThreshold_
@@ -1072,6 +1098,7 @@ contract Aggor_VerifyTwapConfig is Aggor {
         address uniswapBaseToken_,
         address uniswapQuoteToken_,
         uint8 uniswapBaseTokenDecimals_,
+        uint8 uniswapQuoteTokenDecimals_,
         uint32 uniswapLookback_
     ) public view {
         _verifyTwapConfig(
@@ -1079,6 +1106,7 @@ contract Aggor_VerifyTwapConfig is Aggor {
             uniswapBaseToken_,
             uniswapQuoteToken_,
             uniswapBaseTokenDecimals_,
+            uniswapQuoteTokenDecimals_,
             uniswapLookback_
         );
     }

@@ -25,6 +25,7 @@ contract AggorScript is Script {
         address uniswapBaseToken,
         address uniswapQuoteToken,
         uint8 uniswapBaseTokenDecimals,
+        uint8 uniswapQuoteTokenDecimals,
         uint32 uniswapLookback,
         uint128 agreementDistance,
         uint32 ageThreshold
@@ -40,6 +41,7 @@ contract AggorScript is Script {
                 uniswapBaseToken,
                 uniswapQuoteToken,
                 uniswapBaseTokenDecimals,
+                uniswapQuoteTokenDecimals,
                 uniswapLookback,
                 agreementDistance,
                 ageThreshold
