@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.16;
 
 import {Auth} from "chronicle-std/auth/Auth.sol";
@@ -495,8 +495,8 @@ contract Aggor is IAggor, IToll, Auth {
  *
  *      For more info, see docs/Deployment.md.
  */
-contract Aggor_BASE_QUOTE_COUNTER is Aggor {
-    // @todo   ^^^^ ^^^^^ ^^^^^^^ Adjust name of Aggor instance
+contract ChronicleAggor_BASE_QUOTE_COUNTER is Aggor {
+    // @todo            ^^^^ ^^^^^ ^^^^^^^ Adjust name of Aggor instance
     constructor(
         address initialAuthed,
         address bud_,
