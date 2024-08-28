@@ -7,8 +7,8 @@ import {console2 as console} from "forge-std/console2.sol";
 import {IAuth} from "chronicle-std/auth/IAuth.sol";
 
 import {IAggor} from "src/IAggor.sol";
-import {Aggor_BASE_QUOTE_COUNTER as Aggor} from "src/Aggor.sol";
-// @todo      ^^^^ ^^^^^ ^^^^^^^ Adjust name of Aggor instance
+import {ChronicleAggor_BASE_QUOTE_COUNTER as Aggor} from "src/Aggor.sol";
+// @todo               ^^^^ ^^^^^ ^^^^^^^ Adjust name of Aggor instance
 
 /**
  * @notice Aggor Management Script
