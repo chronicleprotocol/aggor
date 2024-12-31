@@ -62,6 +62,8 @@ contract Aggor is IAggor, IToll, Auth {
     address public immutable chronicle;
     /// @inheritdoc IAggor
     address public immutable chainlink;
+    /// @inheritdoc IAggor
+    address public immutable redstone;
 
     // -- Twap
 
@@ -101,6 +103,7 @@ contract Aggor is IAggor, IToll, Auth {
         address bud_,
         address chronicle_,
         address chainlink_,
+        address redstone_,
         address uniswapPool_,
         address uniswapBaseToken_,
         address uniswapQuoteToken_,
@@ -124,6 +127,7 @@ contract Aggor is IAggor, IToll, Auth {
         _bud = bud_;
         chronicle = chronicle_;
         chainlink = chainlink_;
+        redstone = redstone_;
         uniswapPool = uniswapPool_;
         uniswapBaseToken = uniswapBaseToken_;
         uniswapQuoteToken = uniswapQuoteToken_;
@@ -203,50 +207,49 @@ contract Aggor is IAggor, IToll, Auth {
     /// @return uint The value's age.
     /// @return Status The status information.
     function _read() internal view returns (uint128, uint, Status memory) {
-        // Read Chronicle and Chainlink oracles.
         (bool okChr, uint128 valChr) = _readChronicle();
         (bool okChl, uint128 valChl) = _readChainlink();
+        (bool okRed, uint128 valRed) = _readRedstone();
 
-        uint age = block.timestamp;
+        uint256 index = 0;
+        uint256 age = block.timestamp;
+        uint256 okCount = (okChr ? 1 : 0) + (okChl ? 1 : 0) + (okRed ? 1 : 0);
+        uint128[] memory values = new uint128[](okCount);
 
-        if (okChr && okChl) {
-            // If both oracles ok and in agreement distance, return their median.
-            if (_inAgreementDistance(valChr, valChl)) {
-                return (
-                    LibMedian.median(valChr, valChl),
-                    age,
-                    Status({path: 2, goodOracleCtr: 2})
-                );
-            }
-
-            // If both oracles ok but not in agreement distance, derive value
-            // using TWAP as tie breaker.
-            (bool okTwap, uint128 valTwap) = _readTwap();
-            if (okTwap) {
-                return (
-                    LibMedian.median(valChr, valChl, valTwap),
-                    age,
-                    Status({path: 3, goodOracleCtr: 2})
-                );
-            }
-
-            // Otherwise not possible to decide which oracle is ok.
-        } else if (okChr) {
-            // If only Chronicle ok, use Chronicle's value.
-            return (valChr, age, Status({path: 4, goodOracleCtr: 1}));
-        } else if (okChl) {
-            // If only Chainlink ok, use Chainlink's value.
-            return (valChl, age, Status({path: 4, goodOracleCtr: 1}));
+        if (okChr) {
+            values[index] = valChr;
+            index++;
+        }
+        if (okChl) {
+            values[index] = valChl;
+            index++;
+        }
+        if (okRed) {
+            values[index] = valRed;
+            index++;
         }
 
-        // If no oracle ok use TWAP.
-        (bool ok, uint128 twap) = _readTwap();
-        if (ok) {
-            return (twap, age, Status({path: 5, goodOracleCtr: 0}));
+        if (okCount == 3) {
+            return (
+                LibMedian.median(values[0], values[1], values[2]),
+                age,
+                Status({path: 1, goodOracleCtr: 3})
+            );
+        } else if (okCount == 2) {
+            return (
+                LibMedian.median(values[0], values[1]),
+                age,
+                Status({path: 2, goodOracleCtr: 2})
+            );
+        } else if (okCount == 1) {
+            return (
+                LibMedian.median(values[0]),
+                age,
+                Status({path: 3, goodOracleCtr: 1});
+            );
+        } else {
+            return (0, 0, Status({path: 4, goodOracleCtr: 0}));
         }
-
-        // Otherwise no value derivation possible.
-        return (0, 0, Status({path: 6, goodOracleCtr: 0}));
     }
 
     /// @dev Reads the Chronicle oracle.
@@ -286,7 +289,25 @@ contract Aggor is IAggor, IToll, Auth {
     ///
     /// @return bool Whether oracle is ok.
     /// @return uint128 The oracle's val.
+    function _readRedstone() internal view returns (bool, uint128) {
+        return _readChainlinkAggregatorV3(redstone);
+    }
+
+    /// @dev Reads the Chainlink oracle.
+    ///
+    /// @return bool Whether oracle is ok.
+    /// @return uint128 The oracle's val.
     function _readChainlink() internal view returns (bool, uint128) {
+        return _readChainlinkAggregatorV3(chainlink);
+    }
+
+    /// @dev Reads the price from a PriceFeed interface.
+    ///
+    /// @param priceFeed address of the price feed IChainlinkAggregatorV3.
+    ///
+    /// @return bool Whether oracle is ok.
+    /// @return uint128 The oracle's val.
+    function _readChainlinkAggregatorV3(address priceFeed) internal view returns (bool, uint128) {
         // !!! IMPORTANT WARNING !!!
         //
         // This function implementation MUST NOT be used when the Chainlink
@@ -306,7 +327,7 @@ contract Aggor is IAggor, IToll, Auth {
         // malicious price updates, the first may lead to a total
         // denial-of-service for protocols reading the proxy.
 
-        try IChainlinkAggregatorV3(chainlink).latestRoundData() returns (
+        try IChainlinkAggregatorV3(priceFeed).latestRoundData() returns (
             uint80, /*roundId*/
             int answer,
             uint, /*startedAt*/
@@ -502,6 +523,7 @@ contract ChronicleAggor_BASE_QUOTE_COUNTER is Aggor {
         address bud_,
         address chronicle_,
         address chainlink_,
+        address redstone_,
         address uniswapPool_,
         address uniswapBaseToken_,
         address uniswapQuoteToken_,
@@ -516,6 +538,7 @@ contract ChronicleAggor_BASE_QUOTE_COUNTER is Aggor {
             bud_,
             chronicle_,
             chainlink_,
+            redstone_,
             uniswapPool_,
             uniswapBaseToken_,
             uniswapQuoteToken_,
